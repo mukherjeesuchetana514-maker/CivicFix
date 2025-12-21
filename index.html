@@ -335,42 +335,79 @@
         // 4. Main Report Action
         reportBtn.addEventListener('click', async () => {
             if (!fileToAnalyze) return;
+
+            // Update UI to show we are working
             loading.style.display = 'block';
             reportBtn.disabled = true;
+            document.querySelector('#loading p').innerText = "📍 Getting GPS Location...";
 
-            try {
-                // AI Step
-                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                const imagePart = await fileToGenerativePart(fileToAnalyze);
-                const prompt = "Analyze this image for civic issues (garbage, pothole, bad road). Identify the issue and assign a Severity Score (1-10). Keep it short.";
-                
-                const result = await model.generateContent([prompt, imagePart]);
-                const response = await result.response;
-                const text = response.text();
+            // STEP 1: ASK FOR LOCATION PERMISSION
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(async (position) => {
+                    // Success! We have the coordinates
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
 
-                // Database Step
-                try {
-                    await addDoc(collection(db, "reports"), {
-                        issue: text,
-                        severity: "High",
-                        timestamp: serverTimestamp()
-                    });
-                } catch (dbError) {
-                    console.error("Database Error:", dbError);
-                }
+                    try {
+                        // STEP 2: TALK TO GEMINI (AI)
+                        document.querySelector('#loading p').innerText = "🤖 AI is analyzing image...";
+                        
+                        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                        const imagePart = await fileToGenerativePart(fileToAnalyze);
+                        const prompt = "Analyze this image for civic issues (garbage, pothole, bad road). Identify the issue and assign a Severity Score (1-10). Keep it short.";
+                        
+                        const result = await model.generateContent([prompt, imagePart]);
+                        const response = await result.response;
+                        const text = response.text();
 
-                // Show Result
-                aiText.innerText = text;
+                        // STEP 3: SAVE TO FIREBASE (WITH LOCATION)
+                        try {
+                            await addDoc(collection(db, "reports"), {
+                                issue: text,
+                                severity: "High", // In a real app, you'd parse this from the AI text
+                                location: {
+                                    lat: lat,
+                                    lng: lng
+                                },
+                                googleMapsLink: `https://www.google.com/maps?q=${lat},${lng}`,
+                                timestamp: serverTimestamp()
+                            });
+                            console.log("Saved to Database with Location!");
+                        } catch (dbError) {
+                            console.error("Database Error:", dbError);
+                        }
+
+                        // STEP 4: SHOW RESULT (WITH MAP LINK)
+                        // Note: using innerHTML so we can make the link clickable
+                        aiText.innerHTML = `
+                            <strong>Analysis:</strong> ${text}<br><br>
+                            📍 <strong>Location:</strong> <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" style="color:var(--primary-color); font-weight:bold; text-decoration:none;">View on Google Maps</a>
+                        `;
+                        
+                        loading.style.display = 'none';
+                        resultDiv.style.display = 'block';
+
+                    } catch (error) {
+                        console.error("Error:", error);
+                        loading.style.display = 'none';
+                        alert("Error during AI Analysis. Check API Keys.");
+                        reportBtn.disabled = false;
+                    }
+
+                }, (error) => {
+                    // ERROR: User denied location permission
+                    console.error("Location error:", error);
+                    alert("⚠️ Location Required! We cannot report a civic issue without knowing WHERE it is. Please allow GPS permissions.");
+                    loading.style.display = 'none';
+                    reportBtn.disabled = false;
+                });
+            } else {
+                alert("Geolocation is not supported by your browser.");
                 loading.style.display = 'none';
-                resultDiv.style.display = 'block';
-
-            } catch (error) {
-                console.error("Error:", error);
-                loading.style.display = 'none';
-                alert("Error! Check your API Keys.");
                 reportBtn.disabled = false;
             }
         });
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
 </body>
 </html>
