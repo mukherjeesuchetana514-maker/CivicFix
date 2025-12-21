@@ -1,0 +1,88 @@
+/* ENCHANTING UI THEME */
+:root {
+    --primary-color: #2E7D32; /* Eco Green */
+    --accent-color: #81C784;
+    --bg-gradient: linear-gradient(135deg, #e0f7fa 0%, #e8f5e9 100%);
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background: var(--bg-gradient);
+    min-height: 100vh;
+    padding-top: 70px; /* Space for fixed navbar */
+}
+
+/* Navbar Styling */
+.navbar {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+}
+.navbar-brand {
+    font-weight: 600;
+    color: var(--primary-color) !important;
+    font-size: 1.5rem;
+}
+.nav-link {
+    color: #555 !important;
+    font-weight: 500;
+    transition: color 0.3s;
+}
+.nav-link:hover {
+    color: var(--primary-color) !important;
+}
+
+/* Carousel Styling */
+.carousel-item img {
+    height: 400px;
+    object-fit: cover;
+    filter: brightness(0.7); /* Darken slightly so text pops */
+    border-radius: 0 0 20px 20px;
+}
+.carousel-caption h3 {
+    font-weight: 700;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.6);
+}
+
+/* Card Styling */
+.glass-card {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    padding: 30px;
+    max-width: 500px;
+    margin: auto;
+    transition: transform 0.3s;
+}
+.glass-card:hover {
+    transform: translateY(-5px);
+}
+
+/* Buttons */
+.btn-enchanting {
+    background: linear-gradient(45deg, var(--primary-color), var(--accent-color));
+    border: none;
+    color: white;
+    padding: 10px 25px;
+    border-radius: 50px;
+    box-shadow: 0 5px 15px rgba(46, 125, 50, 0.3);
+    transition: all 0.3s;
+}
+.btn-enchanting:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 20px rgba(46, 125, 50, 0.4);
+}
+
+/* Section Visibility Helpers */
+.section-view { display: none; animation: fadeIn 0.5s; }
+.section-view.active { display: block; }
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#preview { width: 100%; max-height: 300px; object-fit: cover; border-radius: 15px; display: none; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+#loading { display: none; color: var(--primary-color); font-weight: 600; }
+#result { display: none; text-align: left; background: #fff; padding: 20px; border-radius: 15px; margin-top: 20px; border-left: 5px solid var(--primary-color); }
