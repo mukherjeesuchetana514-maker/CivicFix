@@ -36,7 +36,6 @@ let currentLoginType = 'citizen';
 // 1. UI HELPERS (Cool Popups & Toggles)
 // ============================================
 
-// 🌟 Helper for SweetAlert Popups
 const showPopup = (title, text, icon) => {
     if (typeof Swal !== 'undefined') {
         Swal.fire({
@@ -51,7 +50,6 @@ const showPopup = (title, text, icon) => {
     }
 };
 
-// 🌟 Popup for Forgot Password input
 window.forgotPassPopup = () => {
     Swal.fire({
         title: 'Reset Password',
@@ -66,6 +64,49 @@ window.forgotPassPopup = () => {
         }
     });
 };
+
+// 🟢 NEW HELPER: Open Image safely without redirecting
+window.openImage = function(imgData) {
+    if(!imgData || imgData === '#' || imgData.length < 100) {
+        showPopup("No Image", "This report has no valid image.", "info");
+        return;
+    }
+    const w = window.open("");
+    w.document.write(`<img src="${imgData}" style="width:100%; max-width:800px;">`);
+}
+
+// 🟢 NEW FIX: COMPRESS IMAGE TO FIT IN DATABASE
+// This shrinks the image to 800px width and 60% quality to ensure it is under 1MB
+const compressImage = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 800; // Resize to max 800px width
+            const scaleSize = MAX_WIDTH / img.width;
+            
+            // Only resize if bigger than MAX_WIDTH
+            if (img.width > MAX_WIDTH) {
+                canvas.width = MAX_WIDTH;
+                canvas.height = img.height * scaleSize;
+            } else {
+                canvas.width = img.width;
+                canvas.height = img.height;
+            }
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            // Compress to JPEG at 0.6 (60%) quality
+            resolve(canvas.toDataURL('image/jpeg', 0.6)); 
+        }
+        img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+});
 
 // 🌟 TOGGLE LOGIN TYPE (Design Logic)
 window.setLoginType = function(type) {
@@ -125,7 +166,7 @@ window.showSection = function(sectionId) {
     if(navbarCollapse.classList.contains('show')) navbarToggler.click();
 }
 
-// 🔒 PROTECTED ROUTE CHECKER (Updated for Dashboard)
+// 🔒 PROTECTED ROUTE CHECKER
 window.checkAuthAndShow = function(sectionId) {
     if (!currentUser) {
         showPopup("Access Restricted", "Please Login or Create an Account to report issues.", "warning");
@@ -133,7 +174,7 @@ window.checkAuthAndShow = function(sectionId) {
         loginModal.show();
     } else {
         showSection(sectionId);
-        // 🟢 IF USER OPENS 'MY REPORTS', LOAD THEIR DATA
+        // IF USER OPENS 'MY REPORTS', LOAD THEIR DATA
         if(sectionId === 'user-dashboard-section') {
             loadUserDashboard();
         }
@@ -182,7 +223,10 @@ if(reportBtn) {
                 const lng = position.coords.longitude;
 
                 try {
-                    // STEP 1: EDGE AI
+                    // 🟢 1. COMPRESS IMAGE BEFORE SENDING (Solves 'File too large' and 'toBase64' errors)
+                    const compressedImage = await compressImage(fileToAnalyze);
+
+                    // 2. STEP 1: EDGE AI
                     let tfResultText = "No obstacles detected.";
                     if (tfModel) {
                         const imgForTf = document.getElementById('preview');
@@ -193,7 +237,7 @@ if(reportBtn) {
                         }
                     }
 
-                    // STEP 2: BACKEND AI (Gemini)
+                    // 3. STEP 2: BACKEND AI (Gemini)
                     const formData = new FormData();
                     formData.append("image", fileToAnalyze);
                     
@@ -209,9 +253,10 @@ if(reportBtn) {
                     // Standard Google Maps URL
                     const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
 
-                    // STEP 3: SAVE TO FIREBASE
+                    // 🟢 4. STEP 3: SAVE TO FIREBASE (USING COMPRESSED IMAGE)
                     await addDoc(collection(db, "reports"), {
                         issue: geminiText,
+                        imageUrl: compressedImage, // ✅ Saving small compressed image
                         tf_detection: tfResultText,
                         severity: "High", 
                         status: "Pending", 
@@ -397,7 +442,7 @@ window.handleReset = async function(email) {
 }
 
 // ============================================
-// 4. 🟢 USER DASHBOARD (MY REPORTS)
+// 4. USER DASHBOARD (MY REPORTS)
 // ============================================
 window.loadUserDashboard = async function() {
     if(!currentUser) return;
@@ -415,6 +460,9 @@ window.loadUserDashboard = async function() {
             const date = data.timestamp ? new Date(data.timestamp.seconds * 1000).toLocaleDateString() : "Just now";
             let statusColor = data.status === "Resolved" ? "bg-success" : (data.status === "In Progress" ? "bg-primary" : "bg-warning");
             
+            // 🟢 IMAGE AS BACKGROUND
+            let bgImage = data.imageUrl || 'https://via.placeholder.com/600x400?text=No+Image+Available';
+
             // Render Official Reply if it exists
             let replyHtml = `<div class="p-3 bg-light rounded text-muted small text-center mt-3">Waiting for official response...</div>`;
             if(data.adminComment && data.adminComment.trim() !== "") {
@@ -428,11 +476,12 @@ window.loadUserDashboard = async function() {
             html += `
             <div class="col-md-6 mb-4">
                 <div class="card h-100 shadow-sm border-0 rounded-4">
+                    <div style="height: 220px; background-image: url('${bgImage}'); background-size: cover; background-position: center; border-radius: 16px 16px 0 0; position: relative;">
+                        <span class="badge ${statusColor} position-absolute top-0 end-0 m-3 px-3 py-2 shadow-sm" style="font-size:0.9rem;">${data.status || "Pending"}</span>
+                    </div>
+                    
                     <div class="card-body">
-                        <div class="d-flex justify-content-between mb-3">
-                            <span class="badge ${statusColor} rounded-pill px-3">${data.status || "Pending"}</span>
-                            <small class="text-muted">${date}</small>
-                        </div>
+                        <small class="text-muted d-block mb-2">📅 ${date}</small>
                         <h5 class="card-title text-capitalize fw-bold">${(data.issue || "Issue Reported").substring(0, 40)}...</h5>
                         <p class="text-muted small">${data.issue}</p>
                         ${replyHtml}
@@ -478,22 +527,31 @@ window.loadDashboard = async function() {
                 mapUrl = `https://www.google.com/maps?q=${data.location.lat},${data.location.lng}`;
             }
 
+            // 🟢 IMAGE AS BACKGROUND
+            let bgImage = data.imageUrl || 'https://via.placeholder.com/600x400?text=No+Image+Available';
+            
+            // 🟢 BUTTON WITH ONCLICK (NO REDIRECT)
+            let viewBtn = `<button onclick="openImage('${data.imageUrl}')" class="btn btn-sm btn-outline-secondary w-50 rounded-pill">View Photo</button>`;
+
             html += `
             <div class="col-md-6 mb-4">
                 <div class="card h-100 shadow-sm border-0 rounded-4">
+                    <div style="height: 220px; background-image: url('${bgImage}'); background-size: cover; background-position: center; border-radius: 16px 16px 0 0; position: relative;">
+                        <span class="badge ${statusColor} position-absolute top-0 end-0 m-3 px-3 py-2 shadow-sm" id="badge-${doc.id}">${data.status || "Pending"}</span>
+                    </div>
+                    
                     <div class="card-body">
-                        <div class="d-flex justify-content-between mb-2">
-                            <span class="badge ${statusColor} rounded-pill" id="badge-${doc.id}">${data.status || "Pending"}</span>
-                            <small class="text-muted">${date}</small>
-                        </div>
-                        
+                        <small class="text-muted d-block mb-2">📅 ${date}</small>
                         <h5 class="card-title text-capitalize">${(data.issue || "Issue").substring(0, 40)}...</h5>
                         <p class="card-text small text-muted">
                             <strong>AI Analysis:</strong> ${data.issue}<br>
                             <strong>Edge AI:</strong> ${data.tf_detection || "None"}
                         </p>
                         
-                        <a href="${mapUrl}" target="_blank" class="btn btn-sm btn-outline-primary w-100 mb-3 rounded-pill">View Location on Map</a>
+                        <div class="d-flex gap-2 mb-3">
+                            <a href="${mapUrl}" target="_blank" class="btn btn-sm btn-outline-primary w-50 rounded-pill">View Map</a>
+                            ${viewBtn}
+                        </div>
 
                         <div class="bg-light p-3 rounded-4">
                             <label class="small fw-bold text-muted mb-1">Update Status:</label>
@@ -508,6 +566,8 @@ window.loadDashboard = async function() {
                                 <input type="text" class="form-control rounded-start-pill" placeholder="Action taken..." id="comment-${doc.id}" value="${data.adminComment || ''}">
                                 <button class="btn btn-secondary rounded-end-pill" onclick="saveComment('${doc.id}')">Save</button>
                             </div>
+                            
+                            <button class="btn btn-outline-danger btn-sm mt-2 w-100 rounded-pill" onclick="deleteReport('${doc.id}')">🗑️ Delete Report</button>
                         </div>
 
                     </div>
@@ -530,7 +590,7 @@ window.updateStatus = async function(docId, newStatus) {
         await updateDoc(doc(db, "reports", docId), { status: newStatus });
         const badge = document.getElementById(`badge-${docId}`);
         badge.innerText = newStatus;
-        badge.className = `badge ${newStatus === 'Resolved' ? 'bg-success' : (newStatus === 'In Progress' ? 'bg-primary' : 'bg-warning')} rounded-pill`;
+        badge.className = `badge ${newStatus === 'Resolved' ? 'bg-success' : (newStatus === 'In Progress' ? 'bg-primary' : 'bg-warning')} position-absolute top-0 end-0 m-3 px-3 py-2 shadow-sm`;
         showPopup("Updated", "Status changed successfully.", "success");
     } catch(e) { showPopup("Error", e.message, "error"); }
 }
@@ -542,4 +602,37 @@ window.saveComment = async function(docId) {
         await updateDoc(doc(db, "reports", docId), { adminComment: comment });
         showPopup("Success", "Official comment saved!", "success");
     } catch(e) { showPopup("Error", e.message, "error"); }
+}
+
+// 🟢 BEAUTIFUL DELETE CONFIRMATION POPUP
+window.deleteReport = function(docId) {
+    Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to recover this report!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545', // Red color for delete
+        cancelButtonColor: '#6c757d', // Grey color for cancel
+        confirmButtonText: 'Yes, delete it!',
+        borderRadius: '20px'
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            try {
+                // Delete from Firebase
+                await deleteDoc(doc(db, "reports", docId));
+                
+                // Refresh the Dashboard immediately
+                loadDashboard(); 
+                
+                // Show Success Popup
+                Swal.fire(
+                    'Deleted!',
+                    'The report has been removed.',
+                    'success'
+                )
+            } catch (e) {
+                showPopup("Error", e.message, "error");
+            }
+        }
+    });
 }
