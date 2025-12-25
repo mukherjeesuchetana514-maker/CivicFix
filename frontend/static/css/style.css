@@ -31,6 +31,31 @@ body {
 .nav-link:hover {
     color: var(--primary-color) !important;
 }
+.civicpoint{
+    color: white;
+    font-weight: bold;
+    display: inline-block;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    padding-left: 20px;
+    padding-right: 20px;
+    background-color: rgb(10, 110, 10);
+    border-top-left-radius:10px ;
+    border-bottom-left-radius:10px ;
+    box-shadow: 2px 2px 1px rgba(168, 247, 172, 0.774);
+}
+.civicpointvalue{
+    color: rgb(10, 110, 10);
+    font-weight: bolder;
+    font-size: 20px;
+    display: inline-block;
+    padding-top: 2px;
+    padding-bottom: 6px;
+    padding-left: 20px;
+    padding-right: 20px;
+    border-style: ridge;
+    border-color: rgb(8, 143, 8);
+}
 
 /* Carousel Styling */
 .carousel-item img {

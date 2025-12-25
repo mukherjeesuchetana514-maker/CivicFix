@@ -207,6 +207,28 @@ if (typeof cocoSsd !== 'undefined') {
     });
 }
 
+
+// function that add civic point 
+
+
+async function addCivicPoints(user, points = 10) {
+    if (!user) return;
+
+    const userRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userRef);
+
+    if (userSnap.exists()) {
+        const currentPoints = userSnap.data().civicPoints || 0;
+        await updateDoc(userRef, {
+            civicPoints: currentPoints + points
+        });
+    }
+}
+
+
+
+
+
 // Report Action
 if(reportBtn) {
     reportBtn.addEventListener('click', async () => {
@@ -267,11 +289,24 @@ if(reportBtn) {
                         userEmail: currentUser ? currentUser.email : "Anonymous"
                     });
 
+                    // use of civic point add function
+                    if (currentUser && currentUser.uid) {
+                        await addCivicPoints(currentUser, 10);
+                    }
+
+                    // lode civic point
+                    const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+                    document.getElementById("civic-points").innerText =
+                    userDoc.data().civicPoints || 0;
+
+
                     // STEP 4: SHOW RESULT
                     aiText.innerHTML = `
                         <div class="alert alert-secondary py-1 mb-2" style="font-size:0.9em">⚡ <strong>Edge AI:</strong> ${tfResultText}</div>
                         <strong>Vertex AI Analysis:</strong> ${geminiText}<br><br>
                         📍 <strong>Location:</strong> <a href="${mapUrl}" target="_blank" style="color:var(--primary-color); font-weight:bold;">View on Google Maps</a>
+                        <p style="font-color:rgb(20,231,20); font-weight: bolder;">CONGRATULATION!!!!</P>
+                        <p>YOU GAIN  10 CIVIC POINT</p>
                     `;
                     
                     loading.style.display = 'none';
@@ -340,7 +375,7 @@ window.handleLogin = async function() {
             loadDashboard();
             
             showPopup("Welcome Official", `Logged in to ${currentUser.org}`, "success");
-            
+
         } catch (error) {
             showPopup("Login Failed", error.message, "error");
         }
@@ -358,6 +393,12 @@ window.handleLogin = async function() {
         bootstrap.Modal.getInstance(document.getElementById('loginModal')).hide();
         showPopup("Welcome!", "Login Successful.", "success");
         showSection('report-section');
+
+        // lode civic point 
+                    const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+                    document.getElementById("civic-points").innerText =
+                    userDoc.data().civicPoints || 0;
+
     } catch (error) {
         showPopup("Login Failed", error.message, "error");
     }
@@ -405,8 +446,14 @@ window.handleSignup = async function() {
                 name: name,
                 email: email,
                 role: 'citizen',
+                civicPoints: 0,
                 createdAt: serverTimestamp()
             });
+
+            // lode civic point
+            const userDoc = await getDoc(doc(db, "users", uid));
+            document.getElementById("civic-points").innerText =
+            userDoc.data().civicPoints || 0;
 
             currentUser = userCredential.user;
             document.getElementById('loginBtn').style.display = 'none';
