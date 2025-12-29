@@ -1,38 +1,10 @@
-# ==========================
-# 1. SECURITY (Crucial)
-# ==========================
-# Ignored to keep API keys safe
-.env
-backend/.env
-config.js
-frontend/static/js/config.js
-
-# ==========================
-# 2. PYTHON / FLASK JUNK
-# ==========================
-# Compiled python files
+# Ignore Python cache files
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
 
-# Virtual Environments (if you use them)
-venv/
-env/
-.venv/
+# Ignore Environment Variables (API Keys)
+.env
 
-# ==========================
-# 3. OPERATING SYSTEM JUNK
-# ==========================
-# Mac
-.DS_Store
-
-# Windows
-Thumbs.db
-Desktop.ini
-
-# ==========================
-# 4. EDITOR SETTINGS
-# ==========================
-.vscode/
-.idea/
+# Ignore Firebase Secrets (VERY IMPORTANT)
+backend/serviceAccountKey.json
+serviceAccountKey.json

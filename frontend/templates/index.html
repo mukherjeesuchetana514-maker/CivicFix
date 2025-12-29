@@ -11,6 +11,9 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
@@ -45,12 +48,12 @@
         }
 
         /* Inputs */
-        .form-control.rounded-pill {
+        .form-control.rounded-pill, .form-select.rounded-pill {
             padding: 12px 20px;
             border: 1px solid #dee2e6;
             font-size: 0.95rem;
         }
-        .form-control.rounded-pill:focus {
+        .form-control.rounded-pill:focus, .form-select.rounded-pill:focus {
             border-color: #0d6efd;
             box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.1);
         }
@@ -78,8 +81,7 @@
 <body>
 
     <nav class="navbar navbar-expand-lg fixed-top transition-all">
-        <div class="container">
-            <a class="navbar-brand fw-bold text-success" href="#" onclick="showSection('home-section')">
+        <div class="container-fluid px-4"> <a class="navbar-brand fw-bold text-success" href="#" onclick="showSection('home-section')">
                 <i class="bi bi-recycle"></i> CivicFix
             </a>
             
@@ -100,14 +102,26 @@
                     </li>
                 </ul>
 
-                <ul class="navbar-nav ms-auto align-items-center" id="nav-official" style="display:none;">
-                    <li class="nav-item"><span class="nav-link fw-bold text-primary" id="org-name-display">🏛️ Dashboard</span></li>
-                    <li class="nav-item ms-lg-3">
+                <ul class="navbar-nav ms-auto align-items-center gap-2" id="nav-official" style="display:none;">
+                    
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="checkAuthAndShow('admin-section')">🏛️ Dashboard</a></li>
+                    
+                    <li class="nav-item">
+                        <a class="nav-link text-danger fw-bold" href="#" onclick="checkAuthAndShow('map-section'); initMap();">
+                            <i class="bi bi-broadcast"></i> Live Map
+                        </a>
+                    </li>
+
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="checkAuthAndShow('leaderboard-section')">🏆 Top Contributors</a></li>
+                    
+                    <li class="nav-item d-none d-lg-block border-end mx-2" style="height: 24px;"></li>
+
+                    <li class="nav-item d-flex align-items-center gap-3">
+                        <span class="nav-link fw-bold text-primary mb-0" id="org-name-display"></span>
                         <button class="btn btn-outline-danger rounded-pill px-4" onclick="handleLogout()">Logout</button>
                     </li>
                 </ul>
-
-            </div>
+                </div>
         </div>
     </nav>
 
@@ -177,7 +191,13 @@
 
     <div id="user-dashboard-section" class="section-view container mt-5 pt-5">
         <h2 class="text-center mb-4 text-success fw-bold">My Report Status 📋</h2>
-        <p class="civicpoint">Civic Point<p id="civic-points" class="civicpointvalue"></p></p>
+        
+        <div class="text-center mb-4">
+            <span class="badge bg-warning text-dark rounded-pill px-3 py-2 fs-5">
+                🏆 Civic Points: <span id="civic-points">0</span>
+            </span>
+        </div>
+
         <div class="text-end mb-3">
             <button onclick="loadUserDashboard()" class="btn btn-outline-success rounded-pill px-4"><i class="bi bi-arrow-clockwise"></i> Refresh Status</button>
         </div>
@@ -201,6 +221,36 @@
         </div>
         <div id="reports-container" class="row">
             <div class="text-center text-muted">Loading reports...</div>
+        </div>
+    </div>
+
+    <div id="map-section" class="section-view container mt-5 pt-5">
+        <h2 class="text-center mb-4 text-danger fw-bold">📍 Live Issue Tracker</h2>
+        <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+            <div id="civicMap" style="height: 600px; width: 100%;"></div>
+        </div>
+    </div>
+
+    <div id="leaderboard-section" class="section-view container mt-5 pt-5">
+        <h2 class="text-center mb-4 text-warning fw-bold">🏆 Top Contributors</h2>
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <div class="table-responsive rounded-4 shadow-sm">
+                    <table class="table table-hover align-middle mb-0" style="background:white;">
+                        <thead class="bg-light">
+                            <tr>
+                                <th class="p-3">Rank</th>
+                                <th class="p-3">Name</th>
+                                <th class="p-3">Civic Points</th>
+                                <th class="p-3">Contact Info</th> 
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-body">
+                            <tr><td colspan="4" class="text-center p-4 text-muted">Loading data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -268,16 +318,29 @@
                 <div class="modal-body p-4">
                     <form onsubmit="event.preventDefault(); handleSignup();">
                         
-                        <div class="mb-3" id="signupOrgGroup" style="display:none;">
-                            <input type="text" id="signupOrg" class="form-control rounded-pill" placeholder="Municipality / Organization (e.g. MCKVIE)">
-                        </div>
-
                         <div class="mb-3">
                             <input type="text" id="signupName" class="form-control rounded-pill" placeholder="Full Name" required>
                         </div>
+
+                        <div class="mb-3">
+                            <label class="ms-3 mb-1 small text-muted fw-bold">Where are you located?</label>
+                            <div class="d-flex gap-2">
+                                <select id="signupZoneType" class="form-select rounded-pill" style="width: 40%;">
+                                    <option value="Municipality">Municipality</option>
+                                    <option value="Panchayat">Panchayat</option>
+                                </select>
+                                <input type="text" id="signupZoneName" class="form-control rounded-pill" placeholder="Name (e.g. Howrah)" required style="width: 60%;">
+                            </div>
+                            <div class="form-text ms-3 small">
+                                For Officials: This is the area you manage.<br>
+                                For Citizens: This ensures your reports reach the right office.
+                            </div>
+                        </div>
+
                         <div class="mb-3">
                             <input type="email" id="signupEmail" class="form-control rounded-pill" placeholder="Email Address" required>
                         </div>
+
                         <div class="mb-3">
                             <input type="password" id="signupPass" class="form-control rounded-pill" placeholder="Password (Min 6 chars)" required>
                         </div>
