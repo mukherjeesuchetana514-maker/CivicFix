@@ -1,9 +1,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getFirestore, collection, addDoc, serverTimestamp, getDocs, deleteDoc, doc, updateDoc, setDoc, getDoc, query, where, increment, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
 // ============================================
-// 🛑 YOUR FIREBASE KEYS (Preserved)
+// 🛑 YOUR FIREBASE KEYS
 // ============================================
 const firebaseConfig = {
   apiKey: "AIzaSyCV9_BVsNRw3WREubkBEvRqRzN33_nOW6Y",
@@ -32,49 +33,41 @@ let currentUser = null;
 let currentLoginType = 'citizen';
 
 // ============================================
-// 🟢 SESSION RESTORER (Keeps you logged in!)
+// 🟢 SESSION RESTORER
 // ============================================
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        // User is signed in, restore the session
         currentUser = user;
-        
-        // Check if it's an official or citizen
         const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
             const userData = userDoc.data();
             currentUser.role = userData.role;
             currentUser.org = userData.org || "";
-            currentUser.zone_name = userData.zone_name || ""; // Ensure zone_name is restored
+            currentUser.zone_name = userData.zone_name || ""; 
             
-            // Restore UI based on role
             if (userData.role === 'official') {
                 currentLoginType = 'official';
                 document.getElementById('nav-citizen').style.display = 'none';
                 document.getElementById('nav-official').style.display = 'flex';
-                document.getElementById('org-name-display').innerText = `🏛️ ${userData.org || userData.zone_name}`;
+                const orgDisplay = document.getElementById('org-name-display');
+                if(orgDisplay) orgDisplay.innerText = `🏛️ ${userData.org || userData.zone_name}`;
             } else {
                 currentLoginType = 'citizen';
                 document.getElementById('loginBtn').style.display = 'none';
                 document.getElementById('logoutBtn').style.display = 'block';
                 
-                // Update Points in Navbar
                 const pointsEl = document.getElementById("civic-points");
-                if (pointsEl) {
-                    pointsEl.innerText = userData.civicPoints || 0;
-                }
+                if (pointsEl) pointsEl.innerText = userData.civicPoints || 0;
             }
         }
         console.log("Session restored for:", user.email);
     } else {
-        // User is signed out
         currentUser = null;
-        console.log("No user signed in.");
     }
 });
 
 // ============================================
-// 1. UI HELPERS (Cool Popups & Toggles)
+// 1. UI HELPERS
 // ============================================
 
 const showPopup = (title, text, icon) => {
@@ -82,12 +75,12 @@ const showPopup = (title, text, icon) => {
         Swal.fire({
             title: title,
             text: text,
-            icon: icon, // 'success', 'error', 'warning', 'info'
+            icon: icon,
             confirmButtonColor: '#198754',
             borderRadius: '20px'
         });
     } else {
-        alert(`${title}: ${text}`); // Fallback if Swal isn't loaded
+        alert(`${title}: ${text}`);
     }
 };
 
@@ -106,7 +99,6 @@ window.forgotPassPopup = () => {
     });
 };
 
-// HELPER: Open Image safely without redirecting
 window.openImage = function(imgData) {
     if(!imgData || imgData === '#' || imgData.length < 100) {
         showPopup("No Image", "This report has no valid image.", "info");
@@ -116,7 +108,6 @@ window.openImage = function(imgData) {
     w.document.write(`<img src="${imgData}" style="width:100%; max-width:800px;">`);
 }
 
-// 🟢 NEW FIX: COMPRESS IMAGE TO FIT IN DATABASE
 const compressImage = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -125,10 +116,9 @@ const compressImage = (file) => new Promise((resolve, reject) => {
         img.src = event.target.result;
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 800; // Resize to max 800px width
+            const MAX_WIDTH = 800; 
             const scaleSize = MAX_WIDTH / img.width;
             
-            // Only resize if bigger than MAX_WIDTH
             if (img.width > MAX_WIDTH) {
                 canvas.width = MAX_WIDTH;
                 canvas.height = img.height * scaleSize;
@@ -139,8 +129,6 @@ const compressImage = (file) => new Promise((resolve, reject) => {
 
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            
-            // Compress to JPEG at 0.6 (60%) quality
             resolve(canvas.toDataURL('image/jpeg', 0.6)); 
         }
         img.onerror = (error) => reject(error);
@@ -148,7 +136,6 @@ const compressImage = (file) => new Promise((resolve, reject) => {
     reader.onerror = (error) => reject(error);
 });
 
-// 🌟 TOGGLE LOGIN TYPE (Design Logic)
 window.setLoginType = function(type) {
     currentLoginType = type;
     const btn = document.getElementById('loginSubmitBtn');
@@ -158,27 +145,22 @@ window.setLoginType = function(type) {
     const tabOfficial = document.getElementById('tab-official');
 
     if (type === 'official') {
-        // OFFICIAL STYLE
         btn.innerText = "Login to Dashboard";
         btn.className = "btn btn-dark-official w-100 rounded-pill py-3 fw-bold shadow-sm"; 
         orgInput.style.display = 'block'; 
         createLink.style.display = 'block'; 
-        
         tabCitizen.classList.remove('active');
         tabOfficial.classList.add('active');
     } else {
-        // CITIZEN STYLE
         btn.innerText = "Login as Citizen";
         btn.className = "btn btn-enchanting w-100 rounded-pill py-3 fw-bold shadow-sm"; 
         orgInput.style.display = 'none';
         createLink.style.display = 'block'; 
-        
         tabCitizen.classList.add('active');
         tabOfficial.classList.remove('active');
     }
 }
 
-// 🟢 PREPARE SIGNUP MODAL (Handles Official vs Citizen Layout)
 window.prepareSignupModal = function() {
     const orgGroup = document.getElementById('signupOrgGroup');
     const title = document.getElementById('signupTitle');
@@ -197,7 +179,6 @@ window.prepareSignupModal = function() {
     }
 }
 
-// Navigation Helper
 window.showSection = function(sectionId) {
     document.querySelectorAll('.section-view').forEach(el => el.classList.remove('active'));
     document.getElementById(sectionId).classList.add('active');
@@ -210,26 +191,19 @@ window.loadLeaderboard = async function() {
     const tableBody = document.getElementById('leaderboard-body');
     if (!tableBody) return;
 
-    // Show loading state
     tableBody.innerHTML = '<tr><td colspan="4" class="text-center p-4">Loading top contributors...</td></tr>';
 
     try {
         let q;
-
-        // 1. IF OFFICIAL: Filter by their Zone (Municipality/Panchayat)
         if (currentUser && currentUser.role === 'official' && currentUser.zone_name) {
-            
-            // Query: Get citizens in THIS zone, sorted by points
             q = query(
                 collection(db, "users"),
                 where("role", "==", "citizen"),
-                where("zone_name", "==", currentUser.zone_name), // <--- FILTER BY TERRITORY
+                where("zone_name", "==", currentUser.zone_name),
                 orderBy("civicPoints", "desc"),
                 limit(10)
             );
-
         } else {
-            // 2. IF CITIZEN/GUEST: Show Global Top 10 (or you can filter by their zone too)
             q = query(
                 collection(db, "users"),
                 where("role", "==", "citizen"),
@@ -242,79 +216,60 @@ window.loadLeaderboard = async function() {
         let rowsHtml = '';
 
         if (querySnapshot.empty) {
-            rowsHtml = `<tr><td colspan="4" class="text-center p-4 text-muted">No contributors found in this area yet.</td></tr>`;
+            rowsHtml = `<tr><td colspan="4" class="text-center p-4 text-muted">No contributors found yet.</td></tr>`;
         } else {
             let rank = 1;
             querySnapshot.forEach((doc) => {
                 const user = doc.data();
-                
-                // 3. GENERATE ROW (Showing Email in the last column)
                 rowsHtml += `
                     <tr>
                         <td class="p-3 fw-bold">#${rank++}</td>
                         <td class="p-3">
                             <div class="d-flex align-items-center">
-                                <div class="bg-light rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 35px; height: 35px;">
+                                <div class="bg-light rounded-circle d-flex align-items-center me-2" style="width: 35px; height: 35px; justify-content:center;">
                                     <i class="bi bi-person-fill text-secondary"></i>
                                 </div>
                                 ${user.name}
                             </div>
                         </td>
-                        <td class="p-3">
-                            <span class="badge bg-warning text-dark rounded-pill px-3">
-                                🏆 ${user.civicPoints || 0}
-                            </span>
-                        </td>
-                        <td class="p-3 text-muted small">
-                            <i class="bi bi-envelope-at me-1"></i> ${user.email}
-                        </td>
-                    </tr>
-                `;
+                        <td class="p-3"><span class="badge bg-warning text-dark rounded-pill px-3">🏆 ${user.civicPoints || 0}</span></td>
+                        <td class="p-3 text-muted small"><i class="bi bi-envelope-at me-1"></i> ${user.email}</td>
+                    </tr>`;
             });
         }
-
         tableBody.innerHTML = rowsHtml;
 
     } catch (error) {
         console.error("Error loading leaderboard:", error);
-        
-        // Firebase Index Error Handling (Common when filtering by multiple fields)
         if (error.message.includes("index")) {
-            tableBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-3">
-                ⚠️ System Config Error: Missing Database Index.<br>
-                <small>Open browser console for the link to create it.</small>
-            </td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-3">⚠️ Missing Database Index. Open console for link.</td></tr>`;
         } else {
             tableBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-3">Error loading data.</td></tr>`;
         }
     }
 }
 
-let map; // Global variable to hold the map instance
+let map;
 
 window.initMap = async function() {
-    // 1. If map already exists, just resize it (fixes display bugs)
     if (map) {
         setTimeout(() => map.invalidateSize(), 100);
         return;
     }
 
-    // 2. Initialize Map (Default view: India Center, you can change coords)
+    if (!currentUser) {
+        showPopup("Login Required", "Please login to view the map.", "warning");
+        return; 
+    }
+
     map = L.map('civicMap').setView([22.75, 88.34], 13); 
 
-    // 3. Add OpenStreetMap Tile Layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // 4. Fetch Reports and Add Markers
     try {
-        // Query reports for the logged-in official's territory
-        const q = query(
-            collection(db, "reports"), 
-            where("zone_name", "==", currentUser.zone_name) 
-        );
-        
+        const q = query(collection(db, "reports"), where("zone_name", "==", currentUser.zone_name));
         const querySnapshot = await getDocs(q);
 
         if (querySnapshot.empty) {
@@ -323,53 +278,34 @@ window.initMap = async function() {
 
         querySnapshot.forEach((doc) => {
             const report = doc.data();
-            
-            // CHECK: Only add marker if report has location data
             if (report.location && report.location.lat && report.location.lng) {
-                
-                // Customize Icon (Optional: Red for pending, Green for solved)
                 const markerColor = report.status === 'Solved' ? 'green' : 'red';
-                
-                // Add Marker
                 const marker = L.marker([report.location.lat, report.location.lng]).addTo(map);
-                
-                // Add Popup with Info
                 marker.bindPopup(`
-                    <b>Issue:</b> ${report.issue_text}<br>
+                    <b>Issue:</b> ${report.issue}<br>
                     <b>Status:</b> <span style="color:${markerColor}">${report.status}</span><br>
-                    <small>${new Date(report.timestamp).toLocaleDateString()}</small><br>
+                    <small>${new Date(report.timestamp.seconds * 1000).toLocaleDateString()}</small><br>
                     <img src="${report.imageUrl}" style="width:100px; margin-top:5px; border-radius:5px;">
                 `);
             }
         });
-
     } catch (error) {
         console.error("Error loading map data:", error);
     }
 }
 
-// 🔒 PROTECTED ROUTE CHECKER
 window.checkAuthAndShow = function(sectionId) {
     if (!currentUser) {
-        showPopup("Access Restricted", "Please Login or Create an Account to report issues.", "warning");
+        showPopup("Access Restricted", "Please Login to report issues.", "warning");
         const loginModal = new bootstrap.Modal(document.getElementById('loginModal'));
         loginModal.show();
     } else {
         showSection(sectionId);
-        // IF USER OPENS 'MY REPORTS', LOAD THEIR DATA
-        if(sectionId === 'user-dashboard-section') {
-            loadUserDashboard();
-        }
-        // 🟢 IF USER OPENS 'TOP CONTRIBUTORS', LOAD LEADERBOARD
-        if(sectionId === 'leaderboard-section') {
-            loadLeaderboard();
-        }
+        if(sectionId === 'user-dashboard-section') loadUserDashboard();
+        if(sectionId === 'leaderboard-section') loadLeaderboard();
     }
 }
 
-// ============================================
-// 2. CAMERA PREVIEW & AI LOGIC
-// ============================================
 if(cameraInput) {
     cameraInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
@@ -382,38 +318,27 @@ if(cameraInput) {
     });
 }
 
-// Load TensorFlow Model
 let tfModel = null;
 if (typeof cocoSsd !== 'undefined') {
     cocoSsd.load().then(loadedModel => {
         tfModel = loadedModel;
         console.log("⚡ TensorFlow Edge Model Loaded!");
-    }).catch(err => {
-        console.log("TensorFlow failed to load:", err);
-    });
+    }).catch(err => console.log("TensorFlow failed:", err));
 }
 
-
-// function that add civic point 
 async function addCivicPoints(user, points = 10) {
     if (!user) return;
     try {
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
-
         if (userSnap.exists()) {
             const currentPoints = userSnap.data().civicPoints || 0;
-            await updateDoc(userRef, {
-                civicPoints: currentPoints + points
-            });
+            await updateDoc(userRef, { civicPoints: currentPoints + points });
         }
-    } catch (e) {
-        console.log("Error adding points:", e);
-    }
+    } catch (e) { console.log("Error adding points:", e); }
 }
 
-// Report Action (Optimized for Speed)
-// Report Action (Smart GPS with Retry)
+// 🟢 REPORT ACTION (Smart GPS + Direct Gemini + CONFIG FIX)
 if(reportBtn) {
     reportBtn.addEventListener('click', async () => {
         if (!fileToAnalyze) return;
@@ -423,19 +348,23 @@ if(reportBtn) {
         reportBtn.disabled = true;
         reportBtn.innerText = "Locating..."; 
 
-        // 1. Success Callback (Shared for both attempts)
+        // 🟢 LOAD KEY FROM CONFIG.JS
+        // Ensure you have created static/js/config.js with your key!
+        const API_KEY = CONFIG.GEMINI_API_KEY; 
+
+        // 1. Success Callback (Shared for both GPS attempts)
         const onLocationFound = async (position) => {
             reportBtn.innerText = "Analyzing...";
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
 
             try {
-                // 1. COMPRESS IMAGE
+                // 1. COMPRESS IMAGE (For Database)
                 const compressedImage = await compressImage(fileToAnalyze);
 
-                // 2. EDGE AI
+                // 2. EDGE AI (TensorFlow) - Optional
                 let tfResultText = "No obstacles detected.";
-                if (window.tfModel) { // Changed to window.tfModel to be safe
+                if (window.tfModel) {
                     try {
                         const imgForTf = document.getElementById('preview');
                         const predictions = await window.tfModel.detect(imgForTf);
@@ -446,13 +375,31 @@ if(reportBtn) {
                     } catch(e) { console.log("TF Skipped", e); }
                 }
 
-                // 3. BACKEND AI
-                const formData = new FormData();
-                formData.append("image", fileToAnalyze);
-                const response = await fetch('/api/analyze', { method: 'POST', body: formData });
-                const data = await response.json();
-                if(data.error) throw new Error(data.error);
-                const geminiText = data.result;
+                // 3. GEMINI AI (DIRECT CLIENT-SIDE CALL)
+                let geminiText = "Analysis Failed";
+                try {
+                    const genAI = new GoogleGenerativeAI(API_KEY);
+                    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+
+                    // Convert file to Base64 for Gemini
+                    const base64Data = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                        reader.readAsDataURL(fileToAnalyze);
+                    });
+
+                    const prompt = "Identify the civic issue in this image (e.g., garbage, pothole, waterlogging) in 1 short sentence.";
+                    const imagePart = {
+                        inlineData: { data: base64Data, mimeType: fileToAnalyze.type },
+                    };
+
+                    const result = await model.generateContent([prompt, imagePart]);
+                    const response = await result.response;
+                    geminiText = response.text();
+                } catch (apiError) {
+                    console.error("Gemini API Error:", apiError);
+                    geminiText = "AI Service Unavailable (Check API Key)";
+                }
 
                 // 4. SAVE TO FIREBASE
                 const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
@@ -480,10 +427,11 @@ if(reportBtn) {
                     if(pointsEl) pointsEl.innerText = (parseInt(pointsEl.innerText) || 0) + 10;
                 } catch (e) {}
 
+                // SHOW RESULT
                 aiText.innerHTML = `
                     <div class="alert alert-secondary py-1 mb-2" style="font-size:0.9em">⚡ <strong>Edge AI:</strong> ${tfResultText}</div>
                     <strong>Analysis:</strong> ${geminiText}<br><br>
-                    📍 <strong>Location:</strong> <a href="${mapUrl}" target="_blank" style="color:var(--primary-color); font-weight:bold;">View Map</a>
+                    📍 <strong>Location:</strong> <a href="${mapUrl}" target="_blank" style="color:var(--primary-color);">View Map</a>
                     <p style="color:rgb(20,231,20); font-weight: bolder;">CONGRATULATIONS!!!!</P>
                     <p>YOU GAIN 10 CIVIC POINTS</p>
                 `;
@@ -491,7 +439,6 @@ if(reportBtn) {
                 loading.style.display = 'none';
                 resultDiv.style.display = 'block';
                 showPopup("Report Sent!", "+10 Points Added!", "success");
-                
                 reportBtn.innerText = "Report Issue";
                 reportBtn.disabled = false;
 
@@ -508,21 +455,19 @@ if(reportBtn) {
         const onLocationError = (err) => {
             console.warn("GPS Final Error", err);
             loading.style.display = 'none';
-            // Show alert specifically about permissions
-            alert("Could not get location. Please ensure GPS is ON and browser permission is allowed.");
+            alert("Could not get location. Check GPS/Permissions.");
             reportBtn.disabled = false;
             reportBtn.innerText = "Report Issue";
         };
 
-        // 🟢 3. SMART EXECUTION (The Fix)
+        // 3. SMART EXECUTION
         if ("geolocation" in navigator) {
             // Attempt 1: High Accuracy (Wait 5s)
             navigator.geolocation.getCurrentPosition(
                 onLocationFound, 
                 (err) => {
                     console.log("High Accuracy failed. Retrying with Low Accuracy...");
-                    
-                    // Attempt 2: Low Accuracy (Reliable fallback if High fails)
+                    // Attempt 2: Low Accuracy (Reliable fallback)
                     navigator.geolocation.getCurrentPosition(
                         onLocationFound,
                         onLocationError,
@@ -543,258 +488,150 @@ if(reportBtn) {
 // 3. AUTHENTICATION HANDLERS
 // ============================================
 
-// A. HANDLE LOGIN
 window.handleLogin = async function() {
     const email = document.getElementById('loginEmail').value;
     const pass = document.getElementById('loginPass').value;
-    
-    // Determine which tab is active (Citizen or Official)
-    const isOfficialTab = document.getElementById('tab-official') && document.getElementById('tab-official').classList.contains('active');
-    const role = isOfficialTab ? 'official' : 'citizen';
-    
-    // UI Feedback
+    const role = document.getElementById('tab-official') && document.getElementById('tab-official').classList.contains('active') ? 'official' : 'citizen';
     const btn = document.getElementById('loginSubmitBtn');
     const originalText = btn.innerText;
+    
     btn.innerText = "Verifying...";
     btn.disabled = true;
 
     try {
-        // 🟢 1. CALL YOUR PYTHON BACKEND
-        const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                email: email, 
-                password: pass, 
-                role: role 
-            })
-        });
+        // 🟢 FIX: USE FIREBASE AUTH DIRECTLY (No Python Backend)
+        const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+        const user = userCredential.user;
 
-        const data = await response.json();
-
-        // 🟢 2. HANDLE SUCCESS OR ERROR
-        if (data.status === 'success') {
+        // Get User Data from Firestore
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        
+        if (userDoc.exists()) {
+            const data = userDoc.data();
             
-            // ✅ CRITICAL FIX: Save the Zone Name from the backend
+            // Check Role
+            if (data.role !== role) {
+                throw new Error(`Please login as ${data.role}`);
+            }
+
             currentUser = {
-                uid: data.user_id,
+                uid: user.uid,
                 name: data.name,
                 email: email,
                 role: data.role,
-                zone_name: data.zone_name, // This fixes the "undefined" error
+                zone_name: data.zone_name,
                 zone_type: data.zone_type
             };
-            
-            // Save to browser memory (so refresh doesn't log you out)
             localStorage.setItem('user', JSON.stringify(currentUser));
-
-            // Close Modal
-            const modalEl = document.getElementById('loginModal');
-            const modal = bootstrap.Modal.getInstance(modalEl);
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
             if(modal) modal.hide();
-
             showPopup("Welcome!", `Logged in as ${data.role}`, "success");
 
-            // 🟢 3. UI UPDATES BASED ON ROLE
             if (currentUser.role === 'official') {
-                // Show Official Nav
                 document.getElementById('nav-citizen').style.display = 'none';
                 document.getElementById('nav-official').style.display = 'flex';
-                
-                // Show Municipality Name in Top Right
-                const orgDisplay = document.getElementById('org-name-display');
-                if(orgDisplay) orgDisplay.innerText = `🏛️ ${currentUser.zone_name}`;
-
-                // Load Dashboard
+                document.getElementById('org-name-display').innerText = `🏛️ ${currentUser.zone_name}`;
                 showSection('admin-section');
-                if(window.loadDashboard) window.loadDashboard();
-                
+                loadDashboard();
             } else {
-                // Show Citizen Nav
                 document.getElementById('nav-citizen').style.display = 'flex';
                 document.getElementById('nav-official').style.display = 'none';
-                
                 document.getElementById('loginBtn').style.display = 'none';
                 document.getElementById('logoutBtn').style.display = 'block';
-
                 showSection('home-section');
-                
-                // Load Points
-                if(window.loadUserDashboard) window.loadUserDashboard();
+                loadUserDashboard();
             }
-
         } else {
-            // Backend returned an error (wrong pass, wrong role, etc)
-            showPopup("Login Failed", data.message, "error");
+            throw new Error("User record not found.");
         }
-
     } catch (error) {
-        console.error("Login Error:", error);
-        showPopup("Connection Error", "Could not connect to server.", "error");
+        showPopup("Login Failed", error.message, "error");
     } finally {
-        // Reset Button
         btn.innerText = originalText;
         btn.disabled = false;
     }
 }
 
-function updateNav() {
-    if (currentUser) {
-        // ... (existing buttons code) ...
-
-        // ✅ FIX: Display the Org/Municipality Name
-        const orgDisplay = document.getElementById('org-name-display');
-        if (orgDisplay) {
-            if (currentUser.role === 'official') {
-                orgDisplay.innerText = `🏛️ ${currentUser.zone_name || 'My Office'}`;
-            } else {
-                orgDisplay.innerText = `👤 ${currentUser.name}`;
-            }
-        }
-    }
-}
-
-// B. HANDLE SIGNUP
 window.handleSignup = async function() {
     const email = document.getElementById('signupEmail').value;
     const pass = document.getElementById('signupPass').value;
     const name = document.getElementById('signupName').value;
-    
-    // Get Territory Inputs
     const zoneType = document.getElementById('signupZoneType').value;
     const zoneName = document.getElementById('signupZoneName').value;
 
     try {
-        // Validate inputs
-        if (!name || !email || !pass || !zoneName) {
-            throw new Error("Please fill in all fields.");
-        }
-
-        // 1. Create Authentication in Firebase (This creates the secure user)
+        if (!name || !email || !pass || !zoneName) throw new Error("Please fill in all fields.");
         const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
         const uid = userCredential.user.uid;
-
-        // 2. Prepare Data for Database
+        
         const commonData = {
             name: name,
             email: email,
-            password: pass,  // 🟢 FIX: THIS LINE WAS MISSING!
+            password: pass, 
             zone_type: zoneType,
             zone_name: zoneName,
             createdAt: serverTimestamp()
         };
 
         if (currentLoginType === 'official') {
+            await setDoc(doc(db, "users", uid), { ...commonData, role: 'official', organization: zoneName });
+            currentUser = { uid, email, role: 'official', zone_name: zoneName, name };
+            localStorage.setItem('user', JSON.stringify(currentUser));
             
-            // SAVE OFFICIAL DATA
-            await setDoc(doc(db, "users", uid), {
-                ...commonData,
-                role: 'official',
-                organization: zoneName 
-            });
-
-            // Update Global Variable
-            currentUser = { 
-                uid: uid,
-                email: email, 
-                role: 'official', 
-                zone_name: zoneName,
-                name: name 
-            };
-            localStorage.setItem('user', JSON.stringify(currentUser)); // Save session
-            
-            // Switch UI to Official
             document.getElementById('nav-citizen').style.display = 'none';
             document.getElementById('nav-official').style.display = 'flex';
             document.getElementById('org-name-display').innerText = `🏛️ ${zoneName}`;
-            
             const modal = bootstrap.Modal.getInstance(document.getElementById('signupModal'));
             if(modal) modal.hide();
-
             showSection('admin-section');
             loadDashboard();
-            showPopup("Account Created", `Welcome Official of ${zoneName}!`, "success");
-
+            showPopup("Account Created", `Welcome Official!`, "success");
         } else {
-            // SAVE CITIZEN DATA
-            await setDoc(doc(db, "users", uid), {
-                ...commonData,
-                role: 'citizen',
-                civicPoints: 0
-            });
-
-            // Update Global Variable
-            currentUser = { 
-                uid: uid,
-                email: email, 
-                role: 'citizen', 
-                zone_name: zoneName,
-                name: name
-            };
-            localStorage.setItem('user', JSON.stringify(currentUser)); // Save session
-
-            // Switch UI to Citizen
+            await setDoc(doc(db, "users", uid), { ...commonData, role: 'citizen', civicPoints: 0 });
+            currentUser = { uid, email, role: 'citizen', zone_name: zoneName, name };
+            localStorage.setItem('user', JSON.stringify(currentUser));
+            
             document.getElementById('loginBtn').style.display = 'none';
             document.getElementById('logoutBtn').style.display = 'block';
-
-            // Safe Point Loading
-            try {
-                const pointsEl = document.getElementById("civic-points");
-                if (pointsEl) pointsEl.innerText = "0";
-            } catch(e) { console.log(e); }
-
             const modal = bootstrap.Modal.getInstance(document.getElementById('signupModal'));
             if(modal) modal.hide();
-
-            showPopup("Account Created!", "Welcome to CivicFix.", "success");
+            showPopup("Account Created!", "Welcome.", "success");
             showSection('report-section');
         }
-
     } catch (error) {
-        console.error(error);
         showPopup("Signup Failed", error.message, "error");
     }
 }
 
-// C. HANDLE LOGOUT
 window.handleLogout = async function() {
     await signOut(auth);
     currentUser = null;
+    localStorage.removeItem('user');
     showPopup("Logged Out", "See you next time!", "info");
     setTimeout(() => window.location.reload(), 1500);
 }
 
-// D. HANDLE FORGOT PASSWORD
 window.handleReset = async function(email) {
     if(!email) return;
     try {
         await sendPasswordResetEmail(auth, email);
-        showPopup("Email Sent", "Check your inbox for the reset link.", "success");
-    } catch (error) {
-        showPopup("Error", error.message, "error");
-    }
+        showPopup("Email Sent", "Check your inbox.", "success");
+    } catch (error) { showPopup("Error", error.message, "error"); }
 }
 
-// ============================================
-// 4. USER DASHBOARD (MY REPORTS)
-// ============================================
+// 4. USER DASHBOARD
 window.loadUserDashboard = async function() {
     if(!currentUser) return;
     const container = document.getElementById('user-reports-container');
     container.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-success"></div></div>';
     
-    // 🟢 FIX: ALWAYS FETCH LATEST POINTS WHEN DASHBOARD LOADS
     try {
         const userDoc = await getDoc(doc(db, "users", currentUser.uid));
         const pointsEl = document.getElementById("civic-points");
-        if (pointsEl && userDoc.exists()) {
-            pointsEl.innerText = userDoc.data().civicPoints || 0;
-        }
-    } catch(e) {
-        console.log("Error syncing points:", e);
-    }
+        if (pointsEl && userDoc.exists()) pointsEl.innerText = userDoc.data().civicPoints || 0;
+    } catch(e) {}
 
-    // LOAD REPORTS
     try {
         const q = query(collection(db, "reports"), where("userEmail", "==", currentUser.email));
         const querySnapshot = await getDocs(q);
@@ -804,148 +641,93 @@ window.loadUserDashboard = async function() {
             const data = doc.data();
             const date = data.timestamp ? new Date(data.timestamp.seconds * 1000).toLocaleDateString() : "Just now";
             let statusColor = data.status === "Resolved" ? "bg-success" : (data.status === "In Progress" ? "bg-primary" : "bg-warning");
+            let bgImage = data.imageUrl || 'https://via.placeholder.com/600x400?text=No+Image';
             
-            let bgImage = data.imageUrl || 'https://via.placeholder.com/600x400?text=No+Image+Available';
-
             let replyHtml = `<div class="p-3 bg-light rounded text-muted small text-center mt-3">Waiting for official response...</div>`;
             if(data.adminComment && data.adminComment.trim() !== "") {
-                replyHtml = `
-                <div class="p-3 bg-info bg-opacity-10 border border-info rounded mt-3">
-                    <strong class="text-info-emphasis">🏛️ Official Reply:</strong>
-                    <p class="mb-0 mt-1 text-dark">${data.adminComment}</p>
-                </div>`;
+                replyHtml = `<div class="p-3 bg-info bg-opacity-10 border border-info rounded mt-3"><strong>🏛️ Official Reply:</strong><p class="mb-0 mt-1 text-dark">${data.adminComment}</p></div>`;
             }
 
             html += `
             <div class="col-md-6 mb-4">
                 <div class="card h-100 shadow-sm border-0 rounded-4">
                     <div style="height: 220px; background-image: url('${bgImage}'); background-size: cover; background-position: center; border-radius: 16px 16px 0 0; position: relative;">
-                        <span class="badge ${statusColor} position-absolute top-0 end-0 m-3 px-3 py-2 shadow-sm" style="font-size:0.9rem;">${data.status || "Pending"}</span>
+                        <span class="badge ${statusColor} position-absolute top-0 end-0 m-3 px-3 py-2 shadow-sm">${data.status || "Pending"}</span>
                     </div>
-                    
                     <div class="card-body">
                         <small class="text-muted d-block mb-2">📅 ${date}</small>
-                        <h5 class="card-title text-capitalize fw-bold">${(data.issue || "Issue Reported").substring(0, 40)}...</h5>
+                        <h5 class="card-title text-capitalize fw-bold">${(data.issue || "Issue").substring(0, 40)}...</h5>
                         <p class="text-muted small">${data.issue}</p>
                         ${replyHtml}
                     </div>
                 </div>
             </div>`;
         });
-        
-        container.innerHTML = html || '<div class="text-center text-muted mt-5"><h5>No reports found.</h5><p>Go to "Report Waste" to submit your first issue!</p></div>';
-        
-    } catch (e) { 
-        console.error(e);
-        container.innerHTML = '<p class="text-danger text-center">Error loading history.</p>';
-    }
+        container.innerHTML = html || '<div class="text-center text-muted mt-5"><h5>No reports found.</h5></div>';
+    } catch (e) { container.innerHTML = '<p class="text-danger text-center">Error loading history.</p>'; }
 }
 
-// ============================================
-// 5. 🏛️ ADMIN DASHBOARD LOGIC
-// ============================================
-
+// 5. OFFICIAL DASHBOARD
 window.loadDashboard = async function() {
     const container = document.getElementById('reports-container');
-    container.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-2 text-muted">Scanning territory reports...</p></div>';
+    container.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>';
     
-    // Safety check for Official
-    if (!currentUser || currentUser.role !== 'official' || !currentUser.zone_name) {
-        container.innerHTML = '<div class="text-center text-danger py-5">Access Denied: Territory Info Missing.</div>';
+    if (!currentUser || currentUser.role !== 'official') {
+        container.innerHTML = '<div class="text-center text-danger py-5">Access Denied.</div>';
         return;
     }
 
-    // Prepare Official's Zone Name (lowercase for matching)
-    const myZone = currentUser.zone_name.toLowerCase().trim();
+    const myZone = (currentUser.zone_name || "").toLowerCase().trim();
 
     try {
-        // 🟢 1. FETCH ALL REPORTS (We filter them in the loop below)
         const querySnapshot = await getDocs(collection(db, "reports"));
-        
         let html = "";
         let count = 0;
         
         querySnapshot.forEach((doc) => {
             const data = doc.data();
-            
-            // 🟢 2. SMART FILTER: Check if names match loosely
-            // Example: "Serampore" matches "Serampore Municipality"
             const reportZone = (data.zone_name || "").toLowerCase().trim();
             
             if (reportZone && (myZone.includes(reportZone) || reportZone.includes(myZone))) {
-                
                 count++;
                 const date = data.timestamp ? new Date(data.timestamp.seconds * 1000).toLocaleDateString() : "Just now";
+                let statusColor = data.status === "In Progress" ? "bg-primary" : (data.status === "Resolved" ? "bg-success" : "bg-warning");
+                let bgImage = data.imageUrl || 'https://via.placeholder.com/600x400';
                 
-                // Color Logic for Badges
-                let statusColor = "bg-warning";
-                if (data.status === "In Progress") statusColor = "bg-primary";
-                if (data.status === "Resolved") statusColor = "bg-success";
-
-                // Dashboard Map Link Fix
-                let mapUrl = data.googleMapsLink;
-                if ((!mapUrl || !mapUrl.startsWith("http")) && data.location) {
-                    mapUrl = `https://www.google.com/maps?q=${data.location.lat},${data.location.lng}`;
-                }
-
-                // Image Handling
-                let bgImage = data.imageUrl || 'https://via.placeholder.com/600x400?text=No+Image+Available';
-                let viewBtn = `<button onclick="openImage('${data.imageUrl}')" class="btn btn-sm btn-outline-secondary w-50 rounded-pill">View Photo</button>`;
-
                 html += `
                 <div class="col-md-6 mb-4">
                     <div class="card h-100 shadow-sm border-0 rounded-4">
-                        <div style="height: 220px; background-image: url('${bgImage}'); background-size: cover; background-position: center; border-radius: 16px 16px 0 0; position: relative;">
-                            <span class="badge ${statusColor} position-absolute top-0 end-0 m-3 px-3 py-2 shadow-sm" id="badge-${doc.id}">${data.status || "Pending"}</span>
+                        <div style="height: 220px; background-image: url('${bgImage}'); background-size: cover; position: relative;">
+                            <span class="badge ${statusColor} position-absolute top-0 end-0 m-3" id="badge-${doc.id}">${data.status}</span>
                         </div>
-                        
                         <div class="card-body">
-                            <div class="d-flex justify-content-between">
-                                <small class="text-muted mb-2">📅 ${date}</small>
-                                <small class="text-primary fw-bold">📍 ${data.zone_name}</small>
-                            </div>
-                            
+                            <div class="d-flex justify-content-between"><small>📅 ${date}</small><small class="text-primary fw-bold">📍 ${data.zone_name}</small></div>
                             <h5 class="card-title text-capitalize">${(data.issue || "Issue").substring(0, 40)}...</h5>
-                            <p class="card-text small text-muted">
-                                <strong>AI Analysis:</strong> ${data.issue}<br>
-                                <strong>Edge AI:</strong> ${data.tf_detection || "None"}
-                            </p>
-                            
                             <div class="d-flex gap-2 mb-3">
-                                <a href="${mapUrl}" target="_blank" class="btn btn-sm btn-outline-primary w-50 rounded-pill">View Map</a>
-                                ${viewBtn}
+                                <a href="${data.googleMapsLink}" target="_blank" class="btn btn-sm btn-outline-primary w-50 rounded-pill">View Map</a>
+                                <button onclick="openImage('${data.imageUrl}')" class="btn btn-sm btn-outline-secondary w-50 rounded-pill">Photo</button>
                             </div>
-
                             <div class="bg-light p-3 rounded-4">
-                                <label class="small fw-bold text-muted mb-1">Update Status:</label>
                                 <select class="form-select form-select-sm mb-2 rounded-pill" onchange="updateStatus('${doc.id}', this.value)">
                                     <option value="Pending" ${data.status === 'Pending' ? 'selected' : ''}>⏳ Pending</option>
                                     <option value="In Progress" ${data.status === 'In Progress' ? 'selected' : ''}>🛠️ In Progress</option>
                                     <option value="Resolved" ${data.status === 'Resolved' ? 'selected' : ''}>✅ Resolved</option>
                                 </select>
-
-                                <label class="small fw-bold text-muted mb-1">Official Reply:</label>
                                 <div class="input-group input-group-sm">
-                                    <input type="text" class="form-control rounded-start-pill" placeholder="Action taken..." id="comment-${doc.id}" value="${data.adminComment || ''}">
+                                    <input type="text" class="form-control rounded-start-pill" placeholder="Reply..." id="comment-${doc.id}" value="${data.adminComment || ''}">
                                     <button class="btn btn-secondary rounded-end-pill" onclick="saveComment('${doc.id}')">Save</button>
                                 </div>
-                                
-                                <button class="btn btn-outline-danger btn-sm mt-2 w-100 rounded-pill" onclick="deleteReport('${doc.id}')">🗑️ Delete Report</button>
+                                <button class="btn btn-outline-danger btn-sm mt-2 w-100 rounded-pill" onclick="deleteReport('${doc.id}')">Delete</button>
                             </div>
-
                         </div>
                     </div>
                 </div>`;
-            } // End if match
+            }
         });
-        
-        container.innerHTML = html || `<div class="text-center text-muted py-5"><h3>No reports found for "${currentUser.zone_name}"</h3></div>`;
-        
-        // Update Counter
+        container.innerHTML = html || '<div class="text-center py-5"><h3>No reports found for this zone.</h3></div>';
         const totalCounter = document.getElementById('total-reports');
         if(totalCounter) totalCounter.innerText = count;
-        
-    } catch (e) { 
+    } catch (e) {
         console.error(e);
         container.innerHTML = '<p class="text-danger text-center">Error loading data.</p>';
     }
