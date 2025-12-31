@@ -1,7 +1,7 @@
 # CivicFix 🌍🛠️
 > **Bridging the Gap Between Citizens and Authorities with AI**
 
-Screenshots/New Project (1).png
+![Banner](Screenshots/banner.png)
 
 ## 📖 Table of Contents
 - [Problem Statement](#-problem-statement)
@@ -55,17 +55,17 @@ The Citizen interface is designed for speed and simplicity.
 ### 1. One-Tap Reporting
 Users simply capture a photo. The app automatically captures the **GPS Coordinates** and runs the **Smart Compression** engine.
 <br>
-Screenshots/Screenshot 2025-12-31 202837.png
+![Report](Screenshots/Reporting.png)
 
 ### 2. AI Verification
 Before submission, Gemini AI analyzes the image to confirm the issue type. This eliminates spam and ensures data quality.
 <br>
-Screenshots/Screenshot 2025-12-31 202949.png
+![Analysis](Screenshots/Analysis.png)
 
 ### 3. Gamification
 A competitive environment to be one of the top contributors. It features a "Smart Filter" that allows citizens to compete while ensuring officials see relevant local heroes.
 <br>
-Screenshots/Screenshot 2025-12-31 203003.png
+![Civic Points](Screenshots/CivicPoints.png)
 
 ---
 
@@ -76,17 +76,17 @@ The Official interface acts as a Command Center for municipal authorities.
 ### 1. Real-Time Heatmap
 A visual map populated with markers (Red for Pending, Green for Resolved). Clicking a marker reveals the AI analysis, photo, and exact location.
 <br>
-Screenshots/Screenshot 2025-12-31 203125.png
+![Map](Screenshots/Map.png)
 
 ### 2. Zone-Specific Data
 The system automatically filters reports based on the Official’s jurisdiction (e.g., "Howrah Zone 1"), ensuring they are not overwhelmed by irrelevant data.
 <br>
-Screenshots/Screenshot 2025-12-31 203022.png
+![Zone Specific](Screenshots/ZoneSpecific.png)
 
 ### 3. Status Management
 Officials can update the status of a report (`Pending` → `In Progress` → `Resolved`) and leave official comments, which are instantly visible to the reporting citizen.
 <br>
-Screenshots/Screenshot 2025-12-31 203100.png
+![Report Status](Screenshots/Status.png)
 
 ---
 
