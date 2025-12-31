@@ -4,6 +4,12 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, se
 import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
 // ============================================
+// 📱 SMART DEVICE DETECTION
+// ============================================
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 800;
+console.log("Device Detected:", isMobile ? "Mobile (Lite Mode)" : "Desktop (Pro Mode)");
+
+// ============================================
 // 🛑 YOUR FIREBASE KEYS
 // ============================================
 const firebaseConfig = {
@@ -60,7 +66,6 @@ onAuthStateChanged(auth, async (user) => {
                 if (pointsEl) pointsEl.innerText = userData.civicPoints || 0;
             }
         }
-        console.log("Session restored for:", user.email);
     } else {
         currentUser = null;
     }
@@ -85,6 +90,12 @@ const showPopup = (title, text, icon) => {
 };
 
 window.forgotPassPopup = () => {
+    // 🟢 ADD THESE 3 LINES TO CLOSE THE LOGIN MENU FIRST
+    const modelel = document.getElementById('loginModal');
+    const model = bootstrap.Modal.getInstance(modelel);
+    if (model) model.hide();
+
+    // The rest is the same...
     Swal.fire({
         title: 'Reset Password',
         input: 'email',
@@ -108,19 +119,40 @@ window.openImage = function(imgData) {
     w.document.write(`<img src="${imgData}" style="width:100%; max-width:800px;">`);
 }
 
-const compressImage = (file) => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
+// 🟢 SMART COMPRESSION
+const compressImage = async (file) => {
+    const targetWidth = isMobile ? 400 : 800; 
+    
+    if (window.createImageBitmap) {
+        try {
+            const bitmap = await createImageBitmap(file, { 
+                resizeWidth: targetWidth, 
+                resizeQuality: 'medium' 
+            });
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(bitmap, 0, 0);
+            
+            bitmap.close(); 
+            return canvas.toDataURL('image/jpeg', 0.6);
+        } catch (e) {
+            console.log("Bitmap method failed, using fallback.");
+        }
+    }
+
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
         const img = new Image();
-        img.src = event.target.result;
+        img.src = url;
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 800; 
-            const scaleSize = MAX_WIDTH / img.width;
+            const scaleSize = targetWidth / img.width;
             
-            if (img.width > MAX_WIDTH) {
-                canvas.width = MAX_WIDTH;
+            if (img.width > targetWidth) {
+                canvas.width = targetWidth;
                 canvas.height = img.height * scaleSize;
             } else {
                 canvas.width = img.width;
@@ -129,12 +161,13 @@ const compressImage = (file) => new Promise((resolve, reject) => {
 
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            URL.revokeObjectURL(url);
             resolve(canvas.toDataURL('image/jpeg', 0.6)); 
-        }
+        };
         img.onerror = (error) => reject(error);
-    };
-    reader.onerror = (error) => reject(error);
-});
+    });
+};
 
 window.setLoginType = function(type) {
     currentLoginType = type;
@@ -194,57 +227,79 @@ window.loadLeaderboard = async function() {
     tableBody.innerHTML = '<tr><td colspan="4" class="text-center p-4">Loading top contributors...</td></tr>';
 
     try {
-        let q;
-        if (currentUser && currentUser.role === 'official' && currentUser.zone_name) {
-            q = query(
-                collection(db, "users"),
-                where("role", "==", "citizen"),
-                where("zone_name", "==", currentUser.zone_name),
-                orderBy("civicPoints", "desc"),
-                limit(10)
-            );
-        } else {
-            q = query(
-                collection(db, "users"),
-                where("role", "==", "citizen"),
-                orderBy("civicPoints", "desc"),
-                limit(10)
-            );
-        }
+        // 1. Fetch Global Citizens
+        const q = query(
+            collection(db, "users"),
+            where("role", "==", "citizen"),
+            orderBy("civicPoints", "desc"),
+            limit(50) 
+        );
 
         const querySnapshot = await getDocs(q);
         let rowsHtml = '';
+        let rank = 1;
+        let count = 0;
 
         if (querySnapshot.empty) {
             rowsHtml = `<tr><td colspan="4" class="text-center p-4 text-muted">No contributors found yet.</td></tr>`;
         } else {
-            let rank = 1;
+            const myZone = currentUser.role === 'official' ? (currentUser.zone_name || "").toLowerCase().trim() : null;
+
             querySnapshot.forEach((doc) => {
                 const user = doc.data();
-                rowsHtml += `
-                    <tr>
-                        <td class="p-3 fw-bold">#${rank++}</td>
-                        <td class="p-3">
-                            <div class="d-flex align-items-center">
-                                <div class="bg-light rounded-circle d-flex align-items-center me-2" style="width: 35px; height: 35px; justify-content:center;">
-                                    <i class="bi bi-person-fill text-secondary"></i>
+                const userZone = (user.zone_name || "").toLowerCase().trim();
+                const points = user.civicPoints || 0;
+
+                let showUser = true;
+                // Smart Filter: If Official, only show users matching my zone
+                if (currentUser.role === 'official') {
+                    if (!userZone.includes(myZone) && !myZone.includes(userZone)) {
+                        showUser = false; 
+                    }
+                }
+
+                if (showUser && count < 10) {
+                    count++;
+                    rowsHtml += `
+                        <tr>
+                            <td class="p-3 fw-bold">#${rank++}</td>
+                            <td class="p-3">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-light rounded-circle d-flex align-items-center me-2" style="width: 35px; height: 35px; justify-content:center;">
+                                        <i class="bi bi-person-fill text-secondary"></i>
+                                    </div>
+                                    ${user.name}
                                 </div>
-                                ${user.name}
-                            </div>
-                        </td>
-                        <td class="p-3"><span class="badge bg-warning text-dark rounded-pill px-3">🏆 ${user.civicPoints || 0}</span></td>
-                        <td class="p-3 text-muted small"><i class="bi bi-envelope-at me-1"></i> ${user.email}</td>
-                    </tr>`;
+                            </td>
+                            <td class="p-3"><span class="badge bg-warning text-dark rounded-pill px-3">🏆 ${points}</span></td>
+                            <td class="p-3 text-muted small">${user.email || "No Email"}</td>
+                        </tr>`;
+                }
             });
         }
+
+        if (rowsHtml === '') {
+            rowsHtml = `<tr><td colspan="4" class="text-center p-4 text-muted">No contributors found in your zone yet.</td></tr>`;
+        }
+
         tableBody.innerHTML = rowsHtml;
 
     } catch (error) {
         console.error("Error loading leaderboard:", error);
+        
+        // 🛑 IMPORTANT: Show the real error so we can fix the Index
         if (error.message.includes("index")) {
-            tableBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-3">⚠️ Missing Database Index. Open console for link.</td></tr>`;
+             tableBody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="text-center p-4">
+                        <span class="text-danger fw-bold">⚠️ Database Index Missing</span><br>
+                        <small>Open your Desktop Browser Console (F12) and click the <a href="#" onclick="alert('Open Console (F12) to click the blue link!')">Long Blue Link</a> to create it.</small>
+                        <br><br>
+                        <small class="text-muted">${error.message}</small>
+                    </td>
+                </tr>`;
         } else {
-            tableBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-3">Error loading data.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-3">Error: ${error.message}</td></tr>`;
         }
     }
 }
@@ -318,12 +373,18 @@ if(cameraInput) {
     });
 }
 
+// ============================================
+// 🤖 TENSORFLOW (SMART LOADING)
+// ============================================
 let tfModel = null;
-if (typeof cocoSsd !== 'undefined') {
+if (!isMobile && typeof cocoSsd !== 'undefined') {
+    console.log("🖥️ Desktop detected: Loading TensorFlow...");
     cocoSsd.load().then(loadedModel => {
         tfModel = loadedModel;
         console.log("⚡ TensorFlow Edge Model Loaded!");
     }).catch(err => console.log("TensorFlow failed:", err));
+} else {
+    console.log("📱 Mobile detected: Skipped TensorFlow to save memory.");
 }
 
 async function addCivicPoints(user, points = 10) {
@@ -338,7 +399,7 @@ async function addCivicPoints(user, points = 10) {
     } catch (e) { console.log("Error adding points:", e); }
 }
 
-// 🟢 REPORT ACTION (Smart GPS + Direct Gemini + CONFIG FIX)
+// 🟢 REPORT ACTION (UPDATED & FIXED)
 if(reportBtn) {
     reportBtn.addEventListener('click', async () => {
         if (!fileToAnalyze) return;
@@ -348,49 +409,51 @@ if(reportBtn) {
         reportBtn.disabled = true;
         reportBtn.innerText = "Locating..."; 
 
-        // 🟢 LOAD KEY FROM CONFIG.JS
-        // Ensure you have created static/js/config.js with your key!
-        const API_KEY = CONFIG.GEMINI_API_KEY; 
+        // 🛑 1. HARDCODED KEY (To bypass config issues)
+        // 🟢 LOAD KEY FROM CONFIG FILE
+        // If config.js is missing (like on GitHub), this will safely fail instead of crashing
+        const API_KEY = (window.CONFIG && window.CONFIG.GEMINI_API_KEY) ? window.CONFIG.GEMINI_API_KEY : "KEY_NOT_FOUND";
 
-        // 1. Success Callback (Shared for both GPS attempts)
+        if (API_KEY === "KEY_NOT_FOUND") {
+            console.error("API Key not found. Make sure config.js exists locally.");
+            } 
+
         const onLocationFound = async (position) => {
             reportBtn.innerText = "Analyzing...";
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
 
             try {
-                // 1. COMPRESS IMAGE (For Database)
+                // 1. SMART COMPRESS
                 const compressedImage = await compressImage(fileToAnalyze);
 
-                // 2. EDGE AI (TensorFlow) - Optional
-                let tfResultText = "No obstacles detected.";
-                if (window.tfModel) {
+                // 2. EDGE AI
+                let tfResultText = "Skipped (Mobile Optimization)";
+                if (tfModel) {
                     try {
                         const imgForTf = document.getElementById('preview');
-                        const predictions = await window.tfModel.detect(imgForTf);
+                        const predictions = await tfModel.detect(imgForTf);
                         if (predictions.length > 0) {
                             const objects = predictions.map(p => p.class).join(", ");
                             tfResultText = `Found: ${objects}`;
+                        } else {
+                            tfResultText = "No specific objects found.";
                         }
                     } catch(e) { console.log("TF Skipped", e); }
                 }
 
-                // 3. GEMINI AI (DIRECT CLIENT-SIDE CALL)
+                // 3. GEMINI AI
                 let geminiText = "Analysis Failed";
                 try {
                     const genAI = new GoogleGenerativeAI(API_KEY);
+                    // 🛑 2. UPDATED MODEL NAME (Based on your logs)
                     const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
-                    // Convert file to Base64 for Gemini
-                    const base64Data = await new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                        reader.readAsDataURL(fileToAnalyze);
-                    });
-
+                    const base64Data = compressedImage.split(',')[1];
                     const prompt = "Identify the civic issue in this image (e.g., garbage, pothole, waterlogging) in 1 short sentence.";
+                    
                     const imagePart = {
-                        inlineData: { data: base64Data, mimeType: fileToAnalyze.type },
+                        inlineData: { data: base64Data, mimeType: "image/jpeg" },
                     };
 
                     const result = await model.generateContent([prompt, imagePart]);
@@ -398,7 +461,8 @@ if(reportBtn) {
                     geminiText = response.text();
                 } catch (apiError) {
                     console.error("Gemini API Error:", apiError);
-                    geminiText = "AI Service Unavailable (Check API Key)";
+                    // 🛑 3. SHOW REAL ERROR
+                    geminiText = "Error: " + (apiError.message || "Unknown API Error");
                 }
 
                 // 4. SAVE TO FIREBASE
@@ -445,13 +509,12 @@ if(reportBtn) {
             } catch (error) {
                 console.error("Error:", error);
                 loading.style.display = 'none';
-                showPopup("Error", "Analysis Failed: " + error.message, "error");
+                showPopup("Error", "Debug: " + error.message, "error");
                 reportBtn.innerText = "Report Issue";
                 reportBtn.disabled = false;
             }
         };
 
-        // 2. Final Error Callback
         const onLocationError = (err) => {
             console.warn("GPS Final Error", err);
             loading.style.display = 'none';
@@ -460,14 +523,10 @@ if(reportBtn) {
             reportBtn.innerText = "Report Issue";
         };
 
-        // 3. SMART EXECUTION
         if ("geolocation" in navigator) {
-            // Attempt 1: High Accuracy (Wait 5s)
             navigator.geolocation.getCurrentPosition(
                 onLocationFound, 
                 (err) => {
-                    console.log("High Accuracy failed. Retrying with Low Accuracy...");
-                    // Attempt 2: Low Accuracy (Reliable fallback)
                     navigator.geolocation.getCurrentPosition(
                         onLocationFound,
                         onLocationError,
@@ -484,9 +543,8 @@ if(reportBtn) {
     });
 }
 
-// ============================================
-// 3. AUTHENTICATION HANDLERS
-// ============================================
+// ... (Rest of Auth/Dashboard handlers remain same) ...
+// (These are identical to previous versions)
 
 window.handleLogin = async function() {
     const email = document.getElementById('loginEmail').value;
@@ -499,29 +557,15 @@ window.handleLogin = async function() {
     btn.disabled = true;
 
     try {
-        // 🟢 FIX: USE FIREBASE AUTH DIRECTLY (No Python Backend)
         const userCredential = await signInWithEmailAndPassword(auth, email, pass);
         const user = userCredential.user;
-
-        // Get User Data from Firestore
         const userDoc = await getDoc(doc(db, "users", user.uid));
         
         if (userDoc.exists()) {
             const data = userDoc.data();
-            
-            // Check Role
-            if (data.role !== role) {
-                throw new Error(`Please login as ${data.role}`);
-            }
+            if (data.role !== role) throw new Error(`Please login as ${data.role}`);
 
-            currentUser = {
-                uid: user.uid,
-                name: data.name,
-                email: email,
-                role: data.role,
-                zone_name: data.zone_name,
-                zone_type: data.zone_type
-            };
+            currentUser = { uid: user.uid, name: data.name, email: email, role: data.role, zone_name: data.zone_name, zone_type: data.zone_type };
             localStorage.setItem('user', JSON.stringify(currentUser));
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
@@ -542,15 +586,8 @@ window.handleLogin = async function() {
                 showSection('home-section');
                 loadUserDashboard();
             }
-        } else {
-            throw new Error("User record not found.");
-        }
-    } catch (error) {
-        showPopup("Login Failed", error.message, "error");
-    } finally {
-        btn.innerText = originalText;
-        btn.disabled = false;
-    }
+        } else { throw new Error("User record not found."); }
+    } catch (error) { showPopup("Login Failed", error.message, "error"); } finally { btn.innerText = originalText; btn.disabled = false; }
 }
 
 window.handleSignup = async function() {
@@ -565,14 +602,7 @@ window.handleSignup = async function() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
         const uid = userCredential.user.uid;
         
-        const commonData = {
-            name: name,
-            email: email,
-            password: pass, 
-            zone_type: zoneType,
-            zone_name: zoneName,
-            createdAt: serverTimestamp()
-        };
+        const commonData = { name: name, email: email, password: pass, zone_type: zoneType, zone_name: zoneName, createdAt: serverTimestamp() };
 
         if (currentLoginType === 'official') {
             await setDoc(doc(db, "users", uid), { ...commonData, role: 'official', organization: zoneName });
@@ -599,9 +629,7 @@ window.handleSignup = async function() {
             showPopup("Account Created!", "Welcome.", "success");
             showSection('report-section');
         }
-    } catch (error) {
-        showPopup("Signup Failed", error.message, "error");
-    }
+    } catch (error) { showPopup("Signup Failed", error.message, "error"); }
 }
 
 window.handleLogout = async function() {
@@ -615,12 +643,14 @@ window.handleLogout = async function() {
 window.handleReset = async function(email) {
     if(!email) return;
     try {
-        await sendPasswordResetEmail(auth, email);
+        // 🟢 ADD 'await' HERE so we wait for Firebase to confirm it was sent
+        await sendPasswordResetEmail(auth, email); 
         showPopup("Email Sent", "Check your inbox.", "success");
-    } catch (error) { showPopup("Error", error.message, "error"); }
+    } catch (error) { 
+        showPopup("Error", error.message, "error"); 
+    }
 }
 
-// 4. USER DASHBOARD
 window.loadUserDashboard = async function() {
     if(!currentUser) return;
     const container = document.getElementById('user-reports-container');
@@ -642,7 +672,6 @@ window.loadUserDashboard = async function() {
             const date = data.timestamp ? new Date(data.timestamp.seconds * 1000).toLocaleDateString() : "Just now";
             let statusColor = data.status === "Resolved" ? "bg-success" : (data.status === "In Progress" ? "bg-primary" : "bg-warning");
             let bgImage = data.imageUrl || 'https://via.placeholder.com/600x400?text=No+Image';
-            
             let replyHtml = `<div class="p-3 bg-light rounded text-muted small text-center mt-3">Waiting for official response...</div>`;
             if(data.adminComment && data.adminComment.trim() !== "") {
                 replyHtml = `<div class="p-3 bg-info bg-opacity-10 border border-info rounded mt-3"><strong>🏛️ Official Reply:</strong><p class="mb-0 mt-1 text-dark">${data.adminComment}</p></div>`;
@@ -667,7 +696,6 @@ window.loadUserDashboard = async function() {
     } catch (e) { container.innerHTML = '<p class="text-danger text-center">Error loading history.</p>'; }
 }
 
-// 5. OFFICIAL DASHBOARD
 window.loadDashboard = async function() {
     const container = document.getElementById('reports-container');
     container.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>';
@@ -733,7 +761,6 @@ window.loadDashboard = async function() {
     }
 }
 
-// Update Status
 window.updateStatus = async function(docId, newStatus) {
     try {
         await updateDoc(doc(db, "reports", docId), { status: newStatus });
@@ -744,7 +771,6 @@ window.updateStatus = async function(docId, newStatus) {
     } catch(e) { showPopup("Error", e.message, "error"); }
 }
 
-// Save Comment
 window.saveComment = async function(docId) {
     const comment = document.getElementById(`comment-${docId}`).value;
     try {
@@ -753,35 +779,23 @@ window.saveComment = async function(docId) {
     } catch(e) { showPopup("Error", e.message, "error"); }
 }
 
-// 🟢 BEAUTIFUL DELETE CONFIRMATION POPUP
 window.deleteReport = function(docId) {
     Swal.fire({
         title: 'Are you sure?',
         text: "You won't be able to recover this report!",
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#dc3545', // Red color for delete
-        cancelButtonColor: '#6c757d', // Grey color for cancel
+        confirmButtonColor: '#dc3545', 
+        cancelButtonColor: '#6c757d', 
         confirmButtonText: 'Yes, delete it!',
         borderRadius: '20px'
     }).then(async (result) => {
         if (result.isConfirmed) {
             try {
-                // Delete from Firebase
                 await deleteDoc(doc(db, "reports", docId));
-                
-                // Refresh the Dashboard immediately
                 loadDashboard(); 
-                
-                // Show Success Popup
-                Swal.fire(
-                    'Deleted!',
-                    'The report has been removed.',
-                    'success'
-                )
-            } catch (e) {
-                showPopup("Error", e.message, "error");
-            }
+                Swal.fire('Deleted!', 'The report has been removed.', 'success')
+            } catch (e) { showPopup("Error", e.message, "error"); }
         }
     });
 }
