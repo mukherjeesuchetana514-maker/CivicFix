@@ -1,7 +1,7 @@
 # CivicFix 🌍🛠️
 > **Bridging the Gap Between Citizens and Authorities with AI**
 
-![Project Banner](C:\Documents\HTML\Civicfix\Screenshots\New Project (1).png)
+Screenshots/New Project (1).png
 
 ## 📖 Table of Contents
 - [Problem Statement](#-problem-statement)
@@ -55,17 +55,17 @@ The Citizen interface is designed for speed and simplicity.
 ### 1. One-Tap Reporting
 Users simply capture a photo. The app automatically captures the **GPS Coordinates** and runs the **Smart Compression** engine.
 <br>
-![Citizen Reporting Screenshot](C:\Documents\HTML\Civicfix\Screenshots\Screenshot 2025-12-31 202837.png)
+Screenshots/Screenshot 2025-12-31 202837.png
 
 ### 2. AI Verification
 Before submission, Gemini AI analyzes the image to confirm the issue type. This eliminates spam and ensures data quality.
 <br>
-![AI Analysis Screenshot](C:\Documents\HTML\Civicfix\Screenshots\Screenshot 2025-12-31 202949.png)
+Screenshots/Screenshot 2025-12-31 202949.png
 
 ### 3. Gamification
 A competitive environment to be one of the top contributors. It features a "Smart Filter" that allows citizens to compete while ensuring officials see relevant local heroes.
 <br>
-![Civic Points Screenshot](C:\Documents\HTML\Civicfix\Screenshots\Screenshot 2025-12-31 203003.png)
+Screenshots/Screenshot 2025-12-31 203003.png
 
 ---
 
@@ -76,17 +76,17 @@ The Official interface acts as a Command Center for municipal authorities.
 ### 1. Real-Time Heatmap
 A visual map populated with markers (Red for Pending, Green for Resolved). Clicking a marker reveals the AI analysis, photo, and exact location.
 <br>
-![Map Dashboard Screenshot](C:\Documents\HTML\Civicfix\Screenshots\Screenshot 2025-12-31 203125.png)
+Screenshots/Screenshot 2025-12-31 203125.png
 
 ### 2. Zone-Specific Data
 The system automatically filters reports based on the Official’s jurisdiction (e.g., "Howrah Zone 1"), ensuring they are not overwhelmed by irrelevant data.
 <br>
-![Zone Filter Screenshot](C:\Documents\HTML\Civicfix\Screenshots\Screenshot 2025-12-31 203022.png)
+Screenshots/Screenshot 2025-12-31 203022.png
 
 ### 3. Status Management
 Officials can update the status of a report (`Pending` → `In Progress` → `Resolved`) and leave official comments, which are instantly visible to the reporting citizen.
 <br>
-![Status Update Screenshot](C:\Documents\HTML\Civicfix\Screenshots\Screenshot 2025-12-31 203100.png)
+Screenshots/Screenshot 2025-12-31 203100.png
 
 ---
 
@@ -103,7 +103,8 @@ Follow these steps to run the project locally.
 ```bash
 git clone [https://github.com/YOUR_USERNAME/CivicFix.git](https://github.com/YOUR_USERNAME/CivicFix.git)
 cd CivicFix
-2. Configure API Keys
+```
+### 2. Configure API Keys
 This project requires a config.js file for the Gemini API key.
 
 Navigate to the static/js/ folder.
@@ -113,14 +114,15 @@ Create a file named config.js.
 Add your key inside:
 
 JavaScript
-
+```
 window.CONFIG = {
     GEMINI_API_KEY: "YOUR_GEMINI_API_KEY_HERE"
 };
-3. Run the Project
+```
+### 3. Run the Project
 Since this is a static web app, you can simply open index.html in your browser. Optional: Use a live server (like the VS Code Live Server extension) for the best experience.
 
-🔮 Future Plans
+### 🔮 Future Plans
 Offline Mode: Implementation of Service Workers to allow reporting even without an active internet connection (data syncs when online).
 
 Government API Integration: Direct integration with municipal work-order systems to automate the dispatch of repair crews.
@@ -129,6 +131,6 @@ Predictive Analytics: Using historical data to predict where potholes or waterlo
 
 Video Reporting: Expanding the AI capabilities to analyze short video clips for more context on complex issues.
 
-🏁 Conclusion
+### 🏁 Conclusion
 CivicFix is not just an application; it is digital infrastructure for a safer city. By leveraging Gemini AI for verification and Firebase for real-time communication, we have created a loop that turns passive residents into active participants in city governance. It transforms the civic grievance process from a "complaint box" into a "collaboration tool," ensuring that when a citizen speaks, the city listens—and acts.
 
