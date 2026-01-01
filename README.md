@@ -101,7 +101,7 @@ Follow these steps to run the project locally.
 
 ### 1. Clone the Repository
 ```bash
-git clone [https://github.com/YOUR_USERNAME/CivicFix.git](https://github.com/YOUR_USERNAME/CivicFix.git)
+git clone [https://github.com/mukherjeesuchetana514-maker/CivicFix.git](https://github.com/mukherjeesuchetana514-maker/CivicFix.git)
 cd CivicFix
 ```
 ### 2. Configure API Keys
