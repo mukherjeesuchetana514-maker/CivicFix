@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import { getFirestore, collection, addDoc, serverTimestamp, getDocs, deleteDoc, doc, updateDoc, setDoc, getDoc, query, where, increment, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, onAuthStateChanged, sendEmailVerification } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
 // ============================================
@@ -90,12 +90,10 @@ const showPopup = (title, text, icon) => {
 };
 
 window.forgotPassPopup = () => {
-    // 🟢 ADD THESE 3 LINES TO CLOSE THE LOGIN MENU FIRST
     const modelel = document.getElementById('loginModal');
     const model = bootstrap.Modal.getInstance(modelel);
     if (model) model.hide();
 
-    // The rest is the same...
     Swal.fire({
         title: 'Reset Password',
         input: 'email',
@@ -227,7 +225,6 @@ window.loadLeaderboard = async function() {
     tableBody.innerHTML = '<tr><td colspan="4" class="text-center p-4">Loading top contributors...</td></tr>';
 
     try {
-        // 1. Fetch Global Citizens
         const q = query(
             collection(db, "users"),
             where("role", "==", "citizen"),
@@ -251,7 +248,6 @@ window.loadLeaderboard = async function() {
                 const points = user.civicPoints || 0;
 
                 let showUser = true;
-                // Smart Filter: If Official, only show users matching my zone
                 if (currentUser.role === 'official') {
                     if (!userZone.includes(myZone) && !myZone.includes(userZone)) {
                         showUser = false; 
@@ -286,8 +282,6 @@ window.loadLeaderboard = async function() {
 
     } catch (error) {
         console.error("Error loading leaderboard:", error);
-        
-        // 🛑 IMPORTANT: Show the real error so we can fix the Index
         if (error.message.includes("index")) {
              tableBody.innerHTML = `
                 <tr>
@@ -399,7 +393,14 @@ async function addCivicPoints(user, points = 10) {
     } catch (e) { console.log("Error adding points:", e); }
 }
 
-// 🟢 REPORT ACTION (UPDATED & FIXED)
+// 🟢 NEW: HELPER FOR EXIF DATA
+function convertDMSToDD(coords, ref) {
+    let dd = coords[0] + coords[1]/60 + coords[2]/3600;
+    if (ref == "S" || ref == "W") dd = dd * -1;
+    return dd;
+}
+
+// 🟢 REPORT ACTION (UPDATED WITH EXIF & ZONE DETECTION)
 if(reportBtn) {
     reportBtn.addEventListener('click', async () => {
         if (!fileToAnalyze) return;
@@ -409,65 +410,73 @@ if(reportBtn) {
         reportBtn.disabled = true;
         reportBtn.innerText = "Locating..."; 
 
-        // 🛑 1. HARDCODED KEY (To bypass config issues)
-        // 🟢 LOAD KEY FROM CONFIG FILE
-        // If config.js is missing (like on GitHub), this will safely fail instead of crashing
         const API_KEY = (window.CONFIG && window.CONFIG.GEMINI_API_KEY) ? window.CONFIG.GEMINI_API_KEY : "KEY_NOT_FOUND";
+        if (API_KEY === "KEY_NOT_FOUND") console.error("API Key not found.");
 
-        if (API_KEY === "KEY_NOT_FOUND") {
-            console.error("API Key not found. Make sure config.js exists locally.");
-            } 
-
-        const onLocationFound = async (position) => {
+        // 🧠 Core Processing Function (Called after we get Location)
+        const processReport = async (lat, lng, locationSource) => {
             reportBtn.innerText = "Analyzing...";
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
-
+            
             try {
-                // 1. SMART COMPRESS
-                const compressedImage = await compressImage(fileToAnalyze);
+                // 1. REVERSE GEOCODING (FIND ZONE)
+                let detectedZone = "Unknown Zone";
+                try {
+                    const geoUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+                    const geoResponse = await fetch(geoUrl);
+                    const geoData = await geoResponse.json();
+                    
+                    detectedZone = geoData.address.city || 
+                                   geoData.address.town || 
+                                   geoData.address.village || 
+                                   geoData.address.municipality || 
+                                   geoData.address.county || 
+                                   "Unknown Zone";
+                    detectedZone = detectedZone.trim();
+                } catch (e) { console.log("Zone detection failed", e); }
 
-                // 2. EDGE AI
+                // 2. VACATION CHECK (Home vs Detected)
+                if (currentUser && currentUser.zone_name) {
+                    const userHomeZone = currentUser.zone_name.trim();
+                    if (userHomeZone.toLowerCase() !== detectedZone.toLowerCase() && detectedZone !== "Unknown Zone") {
+                         showPopup(
+                            "📍 Outside Home Zone", 
+                            `You are currently in ${detectedZone}. This report will be sent to ${detectedZone} officials, not ${userHomeZone}.`, 
+                            "info"
+                        );
+                    }
+                }
+
+                // 3. COMPRESS & AI ANALYSIS
+                const compressedImage = await compressImage(fileToAnalyze);
+                
                 let tfResultText = "Skipped (Mobile Optimization)";
                 if (tfModel) {
                     try {
                         const imgForTf = document.getElementById('preview');
                         const predictions = await tfModel.detect(imgForTf);
                         if (predictions.length > 0) {
-                            const objects = predictions.map(p => p.class).join(", ");
-                            tfResultText = `Found: ${objects}`;
+                            tfResultText = `Found: ${predictions.map(p => p.class).join(", ")}`;
                         } else {
                             tfResultText = "No specific objects found.";
                         }
                     } catch(e) { console.log("TF Skipped", e); }
                 }
 
-                // 3. GEMINI AI
                 let geminiText = "Analysis Failed";
                 try {
                     const genAI = new GoogleGenerativeAI(API_KEY);
-                    // 🛑 2. UPDATED MODEL NAME (Based on your logs)
                     const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
-
                     const base64Data = compressedImage.split(',')[1];
-                    const prompt = "Identify the civic issue in this image (e.g., garbage, pothole, waterlogging) in 1 short sentence.";
-                    
-                    const imagePart = {
-                        inlineData: { data: base64Data, mimeType: "image/jpeg" },
-                    };
-
+                    const prompt = "Identify the civic issue in this image (e.g., garbage, pothole) in 1 short sentence.";
+                    const imagePart = { inlineData: { data: base64Data, mimeType: "image/jpeg" } };
                     const result = await model.generateContent([prompt, imagePart]);
-                    const response = await result.response;
-                    geminiText = response.text();
+                    geminiText = (await result.response).text();
                 } catch (apiError) {
-                    console.error("Gemini API Error:", apiError);
-                    // 🛑 3. SHOW REAL ERROR
                     geminiText = "Error: " + (apiError.message || "Unknown API Error");
                 }
 
-                // 4. SAVE TO FIREBASE
+                // 4. SAVE TO FIREBASE (With Detected Zone)
                 const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-                
                 await addDoc(collection(db, "reports"), {
                     issue: geminiText,
                     imageUrl: compressedImage,
@@ -476,7 +485,8 @@ if(reportBtn) {
                     status: "Pending",
                     adminComment: "",
                     location: { lat: lat, lng: lng },
-                    zone_name: currentUser.zone_name || "Unknown",
+                    locationSource: locationSource, // Track if it was GPS or EXIF
+                    zone_name: detectedZone, // 🟢 USE DETECTED ZONE
                     googleMapsLink: mapUrl,
                     timestamp: serverTimestamp(),
                     userEmail: currentUser ? currentUser.email : "Anonymous"
@@ -486,18 +496,13 @@ if(reportBtn) {
                     await addCivicPoints(currentUser, 10);
                 }
 
-                try {
-                    const pointsEl = document.getElementById("civic-points");
-                    if(pointsEl) pointsEl.innerText = (parseInt(pointsEl.innerText) || 0) + 10;
-                } catch (e) {}
-
-                // SHOW RESULT
+                // UI Finalize
                 aiText.innerHTML = `
                     <div class="alert alert-secondary py-1 mb-2" style="font-size:0.9em">⚡ <strong>Edge AI:</strong> ${tfResultText}</div>
-                    <strong>Analysis:</strong> ${geminiText}<br><br>
-                    📍 <strong>Location:</strong> <a href="${mapUrl}" target="_blank" style="color:var(--primary-color);">View Map</a>
-                    <p style="color:rgb(20,231,20); font-weight: bolder;">CONGRATULATIONS!!!!</P>
-                    <p>YOU GAIN 10 CIVIC POINTS</p>
+                    <strong>Analysis:</strong> ${geminiText}<br>
+                    <small class="text-muted">📍 Location Source: ${locationSource}</small><br><br>
+                    <a href="${mapUrl}" target="_blank" style="color:var(--primary-color);">View Map</a>
+                    <p style="color:rgb(20,231,20); font-weight: bolder;">REPORT SENT! +10 POINTS</P>
                 `;
                 
                 loading.style.display = 'none';
@@ -515,36 +520,49 @@ if(reportBtn) {
             }
         };
 
-        const onLocationError = (err) => {
-            console.warn("GPS Final Error", err);
-            loading.style.display = 'none';
-            alert("Could not get location. Check GPS/Permissions.");
-            reportBtn.disabled = false;
-            reportBtn.innerText = "Report Issue";
-        };
+        // 🟢 LOCATING LOGIC: EXIF -> GPS -> ERROR
+        if (typeof EXIF !== 'undefined') {
+            EXIF.getData(fileToAnalyze, function() {
+                const lat = EXIF.getTag(this, "GPSLatitude");
+                const lng = EXIF.getTag(this, "GPSLongitude");
 
-        if ("geolocation" in navigator) {
-            navigator.geolocation.getCurrentPosition(
-                onLocationFound, 
-                (err) => {
-                    navigator.geolocation.getCurrentPosition(
-                        onLocationFound,
-                        onLocationError,
-                        { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
-                    );
-                }, 
-                { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
-            );
+                if (lat && lng) {
+                    const finalLat = convertDMSToDD(lat, EXIF.getTag(this, "GPSLatitudeRef"));
+                    const finalLng = convertDMSToDD(lng, EXIF.getTag(this, "GPSLongitudeRef"));
+                    console.log("📍 Found location inside image (EXIF)");
+                    processReport(finalLat, finalLng, "Image Data (EXIF)");
+                } else {
+                    console.log("No EXIF, falling back to Device GPS");
+                    getDeviceLocation();
+                }
+            });
         } else {
-            showPopup("Error", "Geolocation not supported.", "error");
-            loading.style.display = 'none';
-            reportBtn.disabled = false;
+            // If library missing, fallback
+            getDeviceLocation();
+        }
+
+        function getDeviceLocation() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => processReport(pos.coords.latitude, pos.coords.longitude, "Device GPS"),
+                    (err) => {
+                         loading.style.display = 'none';
+                         reportBtn.disabled = false;
+                         reportBtn.innerText = "Report Issue";
+                         showPopup("Location Error", "Could not find location from Image or Device. Please enable GPS.", "error");
+                    },
+                    { enableHighAccuracy: true, timeout: 5000 }
+                );
+            } else {
+                showPopup("Error", "Geolocation not supported.", "error");
+                loading.style.display = 'none';
+                reportBtn.disabled = false;
+            }
         }
     });
 }
 
-// ... (Rest of Auth/Dashboard handlers remain same) ...
-// (These are identical to previous versions)
+// ... (Rest of Auth/Dashboard handlers) ...
 
 window.handleLogin = async function() {
     const email = document.getElementById('loginEmail').value;
@@ -559,6 +577,13 @@ window.handleLogin = async function() {
     try {
         const userCredential = await signInWithEmailAndPassword(auth, email, pass);
         const user = userCredential.user;
+        
+        // 🟢 SECURITY: CHECK VERIFICATION
+        if (!user.emailVerified) {
+            await signOut(auth);
+            throw new Error("Please verify your email address before logging in. Check your inbox.");
+        }
+
         const userDoc = await getDoc(doc(db, "users", user.uid));
         
         if (userDoc.exists()) {
@@ -597,39 +622,67 @@ window.handleSignup = async function() {
     const zoneType = document.getElementById('signupZoneType').value;
     const zoneName = document.getElementById('signupZoneName').value;
 
+    // 🟢 SECURITY: STRONG PASSWORD CHECK
+    const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!strongPasswordRegex.test(pass)) {
+        showPopup("Weak Password", "Password must be 8+ chars, with Uppercase, Number & Symbol.", "error");
+        return;
+    }
+
     try {
         if (!name || !email || !pass || !zoneName) throw new Error("Please fill in all fields.");
         const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
         const uid = userCredential.user.uid;
         
-        const commonData = { name: name, email: email, password: pass, zone_type: zoneType, zone_name: zoneName, createdAt: serverTimestamp() };
+        // 🟢 SECURITY: SEND VERIFICATION EMAIL
+        await sendEmailVerification(userCredential.user);
+
+        const commonData = { name: name, email: email, zone_type: zoneType, zone_name: zoneName, createdAt: serverTimestamp() };
 
         if (currentLoginType === 'official') {
             await setDoc(doc(db, "users", uid), { ...commonData, role: 'official', organization: zoneName });
-            currentUser = { uid, email, role: 'official', zone_name: zoneName, name };
-            localStorage.setItem('user', JSON.stringify(currentUser));
-            
-            document.getElementById('nav-citizen').style.display = 'none';
-            document.getElementById('nav-official').style.display = 'flex';
-            document.getElementById('org-name-display').innerText = `🏛️ ${zoneName}`;
-            const modal = bootstrap.Modal.getInstance(document.getElementById('signupModal'));
-            if(modal) modal.hide();
-            showSection('admin-section');
-            loadDashboard();
-            showPopup("Account Created", `Welcome Official!`, "success");
         } else {
             await setDoc(doc(db, "users", uid), { ...commonData, role: 'citizen', civicPoints: 0 });
-            currentUser = { uid, email, role: 'citizen', zone_name: zoneName, name };
-            localStorage.setItem('user', JSON.stringify(currentUser));
-            
-            document.getElementById('loginBtn').style.display = 'none';
-            document.getElementById('logoutBtn').style.display = 'block';
-            const modal = bootstrap.Modal.getInstance(document.getElementById('signupModal'));
-            if(modal) modal.hide();
-            showPopup("Account Created!", "Welcome.", "success");
-            showSection('report-section');
         }
+        
+        // 🟢 LOGOUT IMMEDIATELY FOR VERIFICATION
+        await signOut(auth);
+        
+        const modal = bootstrap.Modal.getInstance(document.getElementById('signupModal'));
+        if(modal) modal.hide();
+        showPopup("Registration Successful", `Verification link sent to ${email}. Please verify before logging in.`, "success");
+        
     } catch (error) { showPopup("Signup Failed", error.message, "error"); }
+}
+
+// 🟢 NEW: AUTO DETECT ZONE FOR SIGNUP
+window.detectSignupLocation = function() {
+    const btn = document.querySelector('button[onclick="detectSignupLocation()"]');
+    if(btn) btn.innerText = "Locating...";
+    
+    if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+            try {
+                const { latitude, longitude } = pos.coords;
+                const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                const zone = data.address.city || data.address.town || data.address.village || data.address.county || "Unknown";
+                
+                document.getElementById('signupZoneName').value = zone;
+                if(btn) {
+                    btn.innerText = "✅ Found";
+                    btn.className = "btn btn-success";
+                }
+            } catch(e) {
+                if(btn) btn.innerText = "❌ Failed";
+                alert("Could not detect. Please type manually.");
+            }
+        });
+    } else {
+        alert("Geolocation not supported.");
+    }
 }
 
 window.handleLogout = async function() {
@@ -643,7 +696,6 @@ window.handleLogout = async function() {
 window.handleReset = async function(email) {
     if(!email) return;
     try {
-        // 🟢 ADD 'await' HERE so we wait for Firebase to confirm it was sent
         await sendPasswordResetEmail(auth, email); 
         showPopup("Email Sent", "Check your inbox.", "success");
     } catch (error) { 
@@ -684,7 +736,7 @@ window.loadUserDashboard = async function() {
                         <span class="badge ${statusColor} position-absolute top-0 end-0 m-3 px-3 py-2 shadow-sm">${data.status || "Pending"}</span>
                     </div>
                     <div class="card-body">
-                        <small class="text-muted d-block mb-2">📅 ${date}</small>
+                        <small class="text-muted d-block mb-2">📅 ${date} • 📍 ${data.zone_name || "Unknown"}</small>
                         <h5 class="card-title text-capitalize fw-bold">${(data.issue || "Issue").substring(0, 40)}...</h5>
                         <p class="text-muted small">${data.issue}</p>
                         ${replyHtml}

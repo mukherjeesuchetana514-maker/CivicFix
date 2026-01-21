@@ -2,9 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#ffffff">
     <title>CivicFix | Clean India</title>
     
+    <link rel="manifest" href="manifest.json">
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('Service Worker registered', reg))
+          .catch(err => console.log('Service Worker failed', err));
+      }
+    </script>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
@@ -13,6 +23,8 @@
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
 
     <link rel="stylesheet" href="static/css/style.css">
 
@@ -325,15 +337,17 @@
                         <div class="mb-3">
                             <label class="ms-3 mb-1 small text-muted fw-bold">Where are you located?</label>
                             <div class="d-flex gap-2">
-                                <select id="signupZoneType" class="form-select rounded-pill" style="width: 40%;">
+                                <select id="signupZoneType" class="form-select rounded-pill" style="width: 35%;">
                                     <option value="Municipality">Municipality</option>
                                     <option value="Panchayat">Panchayat</option>
                                 </select>
-                                <input type="text" id="signupZoneName" class="form-control rounded-pill" placeholder="Name (e.g. Howrah)" required style="width: 60%;">
+                                <input type="text" id="signupZoneName" class="form-control rounded-pill" placeholder="Name (e.g. Howrah)" required style="width: 40%;">
+                                <button class="btn btn-outline-primary rounded-pill px-3" type="button" onclick="detectSignupLocation()" style="width: 25%;">
+                                    <i class="bi bi-geo-alt"></i> Detect
+                                </button>
                             </div>
                             <div class="form-text ms-3 small">
-                                For Officials: This is the area you manage.<br>
-                                For Citizens: This ensures your reports reach the right office.
+                                For Citizens: Ensures reports reach the right office.
                             </div>
                         </div>
 
@@ -342,7 +356,7 @@
                         </div>
 
                         <div class="mb-3">
-                            <input type="password" id="signupPass" class="form-control rounded-pill" placeholder="Password (Min 6 chars)" required>
+                            <input type="password" id="signupPass" class="form-control rounded-pill" placeholder="Password (Min 8 chars, 1 Upper, 1 Sym)" required>
                         </div>
                         
                         <button type="submit" id="signupSubmitBtn" class="btn btn-enchanting w-100 rounded-pill py-3 fw-bold">Create Account</button>
