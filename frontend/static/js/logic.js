@@ -193,17 +193,25 @@ window.setLoginType = function(type) {
 }
 
 window.prepareSignupModal = function() {
-    const orgGroup = document.getElementById('signupOrgGroup');
+    // const orgGroup = document.getElementById('signupOrgGroup');
     const title = document.getElementById('signupTitle');
     const btn = document.getElementById('signupSubmitBtn');
-
+    const z = document.getElementById('zonename');
+    const z_type = document.getElementById('signupZoneType');
+    const z_name = document.getElementById('signupZoneName');
     if (currentLoginType === 'official') {
-        orgGroup.style.display = 'block';
+        z.style.display ='block';
+        z_type.disabled = false;
+        z_name.disabled = false;
+        // orgGroup.style.display = 'block';
         title.innerText = "Official Registration 🏛️";
         btn.innerText = "Create Official Account";
         btn.className = "btn btn-dark-official w-100 rounded-pill py-3 fw-bold";
     } else {
-        orgGroup.style.display = 'none';
+        z.style.display ='none';
+        z_type.disabled = true;
+        z_name.disabled = true;
+        // orgGroup.style.display = 'none';
         title.innerText = "Join the Movement 🌍";
         btn.innerText = "Create Citizen Account";
         btn.className = "btn btn-enchanting w-100 rounded-pill py-3 fw-bold";
@@ -428,6 +436,7 @@ if(reportBtn) {
                     detectedZone = geoData.address.city || 
                                    geoData.address.town || 
                                    geoData.address.village || 
+                                   geoData.address.state_district ||
                                    geoData.address.municipality || 
                                    geoData.address.county || 
                                    "Unknown Zone";
@@ -501,8 +510,10 @@ if(reportBtn) {
                     <div class="alert alert-secondary py-1 mb-2" style="font-size:0.9em">⚡ <strong>Edge AI:</strong> ${tfResultText}</div>
                     <strong>Analysis:</strong> ${geminiText}<br>
                     <small class="text-muted">📍 Location Source: ${locationSource}</small><br><br>
+                    <p>This report is sent to ${detectedZone} Corporation</p>
                     <a href="${mapUrl}" target="_blank" style="color:var(--primary-color);">View Map</a>
                     <p style="color:rgb(20,231,20); font-weight: bolder;">REPORT SENT! +10 POINTS</P>
+                    
                 `;
                 
                 loading.style.display = 'none';
@@ -619,8 +630,7 @@ window.handleSignup = async function() {
     const email = document.getElementById('signupEmail').value;
     const pass = document.getElementById('signupPass').value;
     const name = document.getElementById('signupName').value;
-    const zoneType = document.getElementById('signupZoneType').value;
-    const zoneName = document.getElementById('signupZoneName').value;
+    
 
     // 🟢 SECURITY: STRONG PASSWORD CHECK
     const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
@@ -630,18 +640,27 @@ window.handleSignup = async function() {
     }
 
     try {
-        if (!name || !email || !pass || !zoneName) throw new Error("Please fill in all fields.");
+        
         const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
         const uid = userCredential.user.uid;
-        
         // 🟢 SECURITY: SEND VERIFICATION EMAIL
-        await sendEmailVerification(userCredential.user);
+        await sendEmailVerification(userCredential.user);  
 
-        const commonData = { name: name, email: email, zone_type: zoneType, zone_name: zoneName, createdAt: serverTimestamp() };
+        const commonData = { name: name, email: email, createdAt: serverTimestamp() };
 
         if (currentLoginType === 'official') {
-            await setDoc(doc(db, "users", uid), { ...commonData, role: 'official', organization: zoneName });
+            const zoneType = document.getElementById('signupZoneType').value;
+            const zoneName = document.getElementById('signupZoneName').value;
+
+            if (!name || !email || !pass || !zoneName) throw new Error("Please fill in all fields.");
+
+            await setDoc(doc(db, "users", uid), { ...commonData, zone_type: zoneType, zone_name: zoneName, role: 'official', organization: zoneName });
         } else {
+
+            if (!name || !email || !pass ) throw new Error("Please fill in all fields.");
+                      
+
+
             await setDoc(doc(db, "users", uid), { ...commonData, role: 'citizen', civicPoints: 0 });
         }
         
@@ -663,13 +682,21 @@ window.detectSignupLocation = function() {
     if ("geolocation" in navigator) {
         navigator.geolocation.getCurrentPosition(async (pos) => {
             try {
-                const { latitude, longitude } = pos.coords;
+                // const { latitude, longitude, accuracy } = pos.coords;
+
+                const latitude = pos.coords.latitude;
+                const longitude = pos.coords.longitude;
+
+
                 const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`;
                 const response = await fetch(url);
                 const data = await response.json();
                 
-                const zone = data.address.city || data.address.town || data.address.village || data.address.county || "Unknown";
-                
+                const zone = data.address.city || data.address.town || data.address.village || data.address.state_district || data.address.county || "Unknown";
+                console.log(data.address.state_district);
+                console.log(latitude);
+                console.log(longitude);
+                // console.log("accuracy ",accuracy, "meter");
                 document.getElementById('signupZoneName').value = zone;
                 if(btn) {
                     btn.innerText = "✅ Found";
@@ -679,7 +706,7 @@ window.detectSignupLocation = function() {
                 if(btn) btn.innerText = "❌ Failed";
                 alert("Could not detect. Please type manually.");
             }
-        });
+        }, console.error, {enableHighAccuracy: true});
     } else {
         alert("Geolocation not supported.");
     }
