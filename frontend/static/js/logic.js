@@ -427,21 +427,32 @@ if(reportBtn) {
             
             try {
                 // 1. REVERSE GEOCODING (FIND ZONE)
+                // 1. REVERSE GEOCODING (BigDataCloud - Mobile Friendly)
                 let detectedZone = "Unknown Zone";
                 try {
-                    const geoUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+                    // 🟢 CHANGED: Using BigDataCloud instead of OpenStreetMap (Nominatim blocks mobile)
+                    const geoUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`;
+                    
                     const geoResponse = await fetch(geoUrl);
                     const geoData = await geoResponse.json();
                     
-                    detectedZone = geoData.address.city || 
-                                   geoData.address.town || 
-                                   geoData.address.village || 
-                                   geoData.address.state_district ||
-                                   geoData.address.municipality || 
-                                   geoData.address.county || 
+                    console.log("📍 Geo Data:", geoData); // Debugging
+
+                    // BigDataCloud gives slightly different fields, so we check them in order:
+                    detectedZone = geoData.locality || 
+                                   geoData.city || 
+                                   geoData.principalSubdivision || 
+                                   geoData.countryName || 
                                    "Unknown Zone";
+                                   
                     detectedZone = detectedZone.trim();
-                } catch (e) { console.log("Zone detection failed", e); }
+                    console.log("📍 Detected Zone:", detectedZone);
+
+                } catch (e) { 
+                    console.log("Zone detection failed", e); 
+                    // Fallback to coordinates if API fails
+                    detectedZone = `Zone (${lat.toFixed(2)}, ${lng.toFixed(2)})`;
+                }
 
                 // 2. VACATION CHECK (Home vs Detected)
                 if (currentUser && currentUser.zone_name) {
@@ -518,7 +529,12 @@ if(reportBtn) {
                 
                 loading.style.display = 'none';
                 resultDiv.style.display = 'block';
-                showPopup("Report Sent!", "+10 Points Added!", "success");
+                // 🟢 UPDATED POPUP: Shows exactly where it went
+                showPopup(
+                    "Report Filed! ✅", 
+                    `Your report has been sent to the ${detectedZone} Corporation/Official. (+10 Points)`, 
+                    "success"
+                );
                 reportBtn.innerText = "Report Issue";
                 reportBtn.disabled = false;
 

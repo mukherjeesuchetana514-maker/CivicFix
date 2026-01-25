@@ -23,6 +23,7 @@ body {
     padding-top: 76px; /* Adjusted for taller navbar */
     color: #333;
     overflow-x: hidden; /* Prevent horizontal scroll */
+    -webkit-font-smoothing: antialiased; /* Smoother text */
 }
 
 /* 🌿 Navbar Styling - Floating & Glassy */
@@ -300,9 +301,31 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 10px;
+}
+::-webkit-scrollbar-track {
+    background: #f1f1f1; 
+}
+::-webkit-scrollbar-thumb {
+    background: #81C784; 
+    border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #2E7D32; 
+}
+
 /* Mobile Tweaks */
 @media (max-width: 768px) {
     .carousel-item img { height: 300px; }
     .carousel-caption h2 { font-size: 2rem; }
     .glass-card { padding: 25px; }
+    .navbar-collapse {
+        background: rgba(255,255,255,0.95);
+        border-radius: 20px;
+        padding: 20px;
+        margin-top: 15px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
 }
