@@ -758,7 +758,11 @@ window.loadUserDashboard = async function() {
     } catch(e) {}
 
     try {
-        const q = query(collection(db, "reports"), where("userEmail", "==", currentUser.email));
+        const q = query(
+                    collection(db, "reports"),
+                    where("userEmail", "==", currentUser.email),
+                    orderBy("timestamp", "desc")
+                );
         const querySnapshot = await getDocs(q);
         let html = "";
         
@@ -788,7 +792,10 @@ window.loadUserDashboard = async function() {
             </div>`;
         });
         container.innerHTML = html || '<div class="text-center text-muted mt-5"><h5>No reports found.</h5></div>';
-    } catch (e) { container.innerHTML = '<p class="text-danger text-center">Error loading history.</p>'; }
+    } catch (e) { 
+        container.innerHTML = '<p class="text-danger text-center">Error loading history.</p>';
+        console.error(e);
+     }
 }
 
 window.loadDashboard = async function() {
@@ -803,7 +810,11 @@ window.loadDashboard = async function() {
     const myZone = (currentUser.zone_name || "").toLowerCase().trim();
 
     try {
-        const querySnapshot = await getDocs(collection(db, "reports"));
+
+        const q=query(collection(db, "reports"),orderBy("timestamp","desc"));
+
+
+        const querySnapshot = await getDocs(q);
         let html = "";
         let count = 0;
         
