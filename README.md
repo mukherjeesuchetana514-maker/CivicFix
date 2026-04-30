@@ -132,5 +132,5 @@ Predictive Analytics: Using historical data to predict where potholes or waterlo
 Video Reporting: Expanding the AI capabilities to analyze short video clips for more context on complex issues.
 
 ### 🏁 Conclusion
-CivicFix is not just an application; it is digital infrastructure for a safer city. By leveraging Gemini AI for verification and Firebase for real-time communication, we have created a loop that turns passive residents into active participants in city governance. It transforms the civic grievance process from a "complaint box" into a "collaboration tool," ensuring that when a citizen speaks, the city listens—and acts.
+CivicFix is not just an application; it is digital infrastructure for a safer city. By leveraging the integrated AI for verification and Firebase for real-time communication, we have created a loop that turns passive residents into active participants in city governance. It transforms the civic grievance process from a "complaint box" into a "collaboration tool," ensuring that when a citizen speaks, the city listens—and acts.
 
